@@ -51,7 +51,7 @@ class Picamera2Recorder:
         try:
             from picamera2 import Picamera2  # type: ignore
             from picamera2.encoders import H264Encoder  # type: ignore
-            from picamera2.outputs import FileOutput  # type: ignore
+            from picamera2.outputs import FileOutput, FfmpegOutput  # type: ignore
         except Exception as e:
             raise RuntimeError(
                 "Picamera2 is required on Raspberry Pi OS. "
@@ -74,7 +74,7 @@ class Picamera2Recorder:
         if self.rotation_mode == "ffmpeg_segment":
             await self._start_ffmpeg_segmenting(FileOutput)
         else:
-            await self._start_rotate_outputs(FileOutput)
+            await self._start_rotate_outputs(FfmpegOutput)
 
         self._running = True
         log.info("Camera recording started (mode=%s)", self.rotation_mode)
@@ -139,12 +139,12 @@ class Picamera2Recorder:
         # Avoid blocking the camera thread on asyncio locks; best-effort set.
         self._latest_motion_frame = arr
 
-    async def _start_rotate_outputs(self, FileOutput: Any) -> None:
+    async def _start_rotate_outputs(self, FfmpegOutput: Any) -> None:
         assert self._picam2 is not None
         assert self._encoder is not None
 
         first = self._segment_path()
-        out = FileOutput(str(first))
+        out = FfmpegOutput(str(first))
         self._picam2.start()
         self._picam2.start_recording(self._encoder, out)
 
@@ -153,7 +153,7 @@ class Picamera2Recorder:
                 await asyncio.sleep(self.segment_seconds)
                 try:
                     nxt = self._segment_path()
-                    self._picam2.switch_output(FileOutput(str(nxt)))
+                    self._picam2.switch_output(FfmpegOutput(str(nxt)))
                     log.info("Rotated segment -> %s", nxt.name)
                 except Exception:
                     log.exception("Failed rotating output")
