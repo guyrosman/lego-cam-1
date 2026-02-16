@@ -67,10 +67,11 @@ class Picamera2Recorder:
         )
         self._picam2.configure(video_config)
 
-        # Store frames for motion detection (controller will sample while recording).
-        self._picam2.pre_callback = self._pre_callback
-
         self._encoder = H264Encoder(bitrate=10_000_000)
+        
+        # Store frames for motion detection (controller will sample while recording).
+        # Set callback after encoder is ready but before starting camera
+        self._picam2.pre_callback = self._pre_callback
 
         if self.rotation_mode == "ffmpeg_segment":
             await self._start_ffmpeg_segmenting(FileOutput)
@@ -95,7 +96,8 @@ class Picamera2Recorder:
 
         if self._picam2 is not None:
             try:
-                self._picam2.stop_recording()
+                if hasattr(self._picam2, 'recording') and self._picam2.recording:
+                    self._picam2.stop_recording()
             except Exception:
                 pass
             try:
@@ -106,6 +108,10 @@ class Picamera2Recorder:
                 self._picam2.close()
             except Exception:
                 pass
+            # Small delay to ensure hardware is released
+            await asyncio.sleep(0.1)
+            # Ensure camera hardware is fully released
+            self._picam2 = None
 
         if self._ffmpeg_proc is not None:
             try:
@@ -144,20 +150,29 @@ class Picamera2Recorder:
         assert self._picam2 is not None
         assert self._encoder is not None
 
-        first = self._segment_path()
-        out = FileOutput(str(first))
         self._picam2.start()
-        self._picam2.start_recording(self._encoder, out)
 
         async def _rotator() -> None:
+            segment_num = 0
             while self._running:
+                segment_path = self._segment_path()
+                if segment_num > 0:
+                    # Add segment number to avoid collisions
+                    segment_path = self.output_dir / f"{_utc_stamp()}_{segment_num:03d}.h264"
+                
+                out = FileOutput(str(segment_path))
+                self._picam2.start_recording(self._encoder, out)
+                log.info("Started segment -> %s", segment_path.name)
+                
                 await asyncio.sleep(self.segment_seconds)
-                try:
-                    nxt = self._segment_path()
-                    self._picam2.switch_output(FileOutput(str(nxt)))
-                    log.info("Rotated segment -> %s", nxt.name)
-                except Exception:
-                    log.exception("Failed rotating output")
+                
+                if self._running:
+                    try:
+                        self._picam2.stop_recording()
+                        log.info("Rotated segment -> %s", segment_path.name)
+                    except Exception:
+                        log.exception("Failed stopping segment")
+                segment_num += 1
 
         self._rotate_task = asyncio.create_task(_rotator())
 
@@ -177,9 +192,11 @@ class Picamera2Recorder:
             "-y",
             "-f",
             "h264",
+            "-r",
+            str(self.fps),  # Specify frame rate for proper playback
             "-i",
             "pipe:0",
-            "-c",
+            "-c:v",
             "copy",
             "-f",
             "segment",
@@ -187,6 +204,8 @@ class Picamera2Recorder:
             "1",
             "-segment_time",
             str(self.segment_seconds),
+            "-movflags",
+            "+faststart",  # Enable fast start for web playback
             pattern,
         ]
 

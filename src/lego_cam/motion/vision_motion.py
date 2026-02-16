@@ -59,5 +59,6 @@ class VisionMotionDetector:
         # Motion score: fraction of pixels above threshold
         thresh = float(self.sensitivity)
         moving = (diff > thresh).mean()
-        return moving > 0.02
+        # Increased threshold from 0.02 to 0.05 to reduce false positives
+        return moving > 0.05
 

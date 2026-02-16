@@ -173,6 +173,12 @@ class RecordingController:
                 await self._stop_recording()
 
     async def _on_motion(self, ev: MotionEvent) -> None:
+        # Debouncing: ignore motion events that are too close together (< 0.5s)
+        if self._last_motion_t is not None:
+            time_since_last = ev.t_monotonic - self._last_motion_t
+            if time_since_last < 0.5:
+                return  # Ignore rapid-fire events
+        
         self._last_motion_t = ev.t_monotonic
         if self._state == State.IDLE:
             log.info("Motion detected (%s) -> starting recording", ev.source)
@@ -192,7 +198,10 @@ class RecordingController:
         self._last_motion_t = monotonic()
 
     async def _stop_recording(self) -> None:
-        await self._recorder.stop()
+        try:
+            await self._recorder.stop()
+        except Exception:
+            log.exception("Error stopping recorder")
         self._storage.ensure_free_space()
         self._state = State.IDLE
         self._last_motion_t = None

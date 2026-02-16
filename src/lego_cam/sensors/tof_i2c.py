@@ -35,12 +35,19 @@ class ToFSensor(BaseSensor):
         period = 1.0 / float(self.poll_hz)
 
         if self.simulate:
+            # Debouncing: require 2 consecutive detections before yielding True
+            consecutive_detections = 0
             while True:
                 await asyncio.sleep(period)
-                # 5% chance per tick to simulate presence/motion
-                if random.random() < 0.05:
-                    log.debug("Simulated ToF motion event")
-                    yield True
+                # 2% chance per tick (reduced from 5%) to simulate presence/motion
+                if random.random() < 0.02:
+                    consecutive_detections += 1
+                    if consecutive_detections >= 2:
+                        log.debug("Simulated ToF motion event (debounced)")
+                        yield True
+                        consecutive_detections = 0
+                else:
+                    consecutive_detections = 0
                 # otherwise: no event
             return
 

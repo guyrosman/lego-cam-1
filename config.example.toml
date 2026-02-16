@@ -1,4 +1,4 @@
-im [service]
+[service]
 output_dir = "./videos"
 min_free_mb = 256
 segment_seconds = 30
@@ -17,7 +17,7 @@ enable_vision_motion = true
 has_radar_or_lidar = false
 disable_vision_if_radar_or_lidar = true
 vision_motion_fps = 5
-vision_motion_sensitivity = 25
+vision_motion_sensitivity = 30  # Higher = less sensitive (default 25, increased to reduce false positives)
 
 [sensor]
 backend = "tof_i2c"
