@@ -20,7 +20,7 @@ class CameraConfig:
     height: int = 720
     fps: int = 30
     codec: str = "h264"
-    rotation_mode: str = "rotate"  # rotate|ffmpeg_segment
+    rotation_mode: str = "ffmpeg_segment"  # ffmpeg_segment|rotate
 
 
 @dataclass(frozen=True)

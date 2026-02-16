@@ -22,10 +22,11 @@ class Picamera2Recorder:
     Picamera2 video recorder with 30s segmentation.
 
     Two modes:
-    - rotation_mode=rotate: create a new file every segment_seconds by switching outputs.
-      (Works even without ffmpeg, minimal extra deps.)
-    - rotation_mode=ffmpeg_segment: pipe to ffmpeg segment muxer for seamless segments.
-      (Preferred on Pi if ffmpeg is installed and stable.)
+    - rotation_mode=rotate: create a new raw H.264 file every segment_seconds by
+      switching Picamera2 FileOutput targets. These files typically have a .h264
+      extension and can be remuxed to MP4 with ffmpeg.
+    - rotation_mode=ffmpeg_segment: pipe raw H.264 to an external ffmpeg segment muxer
+      for seamless MP4 segments. (Requires ffmpeg on the system path.)
     """
 
     output_dir: Path
@@ -51,7 +52,7 @@ class Picamera2Recorder:
         try:
             from picamera2 import Picamera2  # type: ignore
             from picamera2.encoders import H264Encoder  # type: ignore
-            from picamera2.outputs import FileOutput, FfmpegOutput  # type: ignore
+            from picamera2.outputs import FileOutput  # type: ignore
         except Exception as e:
             raise RuntimeError(
                 "Picamera2 is required on Raspberry Pi OS. "
@@ -74,7 +75,7 @@ class Picamera2Recorder:
         if self.rotation_mode == "ffmpeg_segment":
             await self._start_ffmpeg_segmenting(FileOutput)
         else:
-            await self._start_rotate_outputs(FfmpegOutput)
+            await self._start_rotate_outputs(FileOutput)
 
         self._running = True
         log.info("Camera recording started (mode=%s)", self.rotation_mode)
@@ -139,12 +140,12 @@ class Picamera2Recorder:
         # Avoid blocking the camera thread on asyncio locks; best-effort set.
         self._latest_motion_frame = arr
 
-    async def _start_rotate_outputs(self, FfmpegOutput: Any) -> None:
+    async def _start_rotate_outputs(self, FileOutput: Any) -> None:
         assert self._picam2 is not None
         assert self._encoder is not None
 
         first = self._segment_path()
-        out = FfmpegOutput(str(first))
+        out = FileOutput(str(first))
         self._picam2.start()
         self._picam2.start_recording(self._encoder, out)
 
@@ -153,7 +154,7 @@ class Picamera2Recorder:
                 await asyncio.sleep(self.segment_seconds)
                 try:
                     nxt = self._segment_path()
-                    self._picam2.switch_output(FfmpegOutput(str(nxt)))
+                    self._picam2.switch_output(FileOutput(str(nxt)))
                     log.info("Rotated segment -> %s", nxt.name)
                 except Exception:
                     log.exception("Failed rotating output")
@@ -203,5 +204,8 @@ class Picamera2Recorder:
         self._picam2.start_recording(self._encoder, out)
 
     def _segment_path(self) -> Path:
-        return self.output_dir / f"{_utc_stamp()}.mp4"
+        # In rotate mode we write raw H.264 elementary streams; in ffmpeg_segment
+        # mode the external ffmpeg process produces MP4 segments.
+        ext = ".mp4" if self.rotation_mode == "ffmpeg_segment" else ".h264"
+        return self.output_dir / f"{_utc_stamp()}{ext}"
 

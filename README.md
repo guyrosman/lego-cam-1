@@ -49,7 +49,7 @@ width = 1280
 height = 720
 fps = 30
 codec = "h264"
-rotation_mode = "rotate"  # rotate|ffmpeg_segment
+rotation_mode = "ffmpeg_segment"  # ffmpeg_segment|rotate
 
 [motion]
 enable_vision_motion = true
