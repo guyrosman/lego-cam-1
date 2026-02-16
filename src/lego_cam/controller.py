@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 from dataclasses import dataclass
 from enum import Enum
 from time import monotonic
@@ -37,6 +38,8 @@ class RecordingController:
         self._storage = storage
         self._state: State = State.IDLE
 
+        self._validate_environment()
+
         # Backends
         self._sensor = ToFSensor(poll_hz=config.sensor.poll_hz, simulate=config.sensor.simulate)
         self._recorder = self._build_recorder()
@@ -56,6 +59,45 @@ class RecordingController:
         )
 
         self._last_motion_t: float | None = None
+
+    def _validate_environment(self) -> None:
+        if self._config.camera.backend != "picamera2":
+            raise RuntimeError(
+                f"Unsupported camera backend: {self._config.camera.backend}. "
+                "Set camera.backend = \"picamera2\" in config."
+            )
+
+        try:
+            import picamera2  # type: ignore  # noqa: F401
+        except Exception as e:
+            raise RuntimeError(
+                "Picamera2 is required. Install on Raspberry Pi OS with:\n"
+                "  sudo apt update\n"
+                "  sudo apt install -y python3-picamera2\n"
+                "Also ensure the camera is enabled (raspi-config -> Interface Options)."
+            ) from e
+
+        if self._config.camera.rotation_mode == "ffmpeg_segment":
+            if shutil.which("ffmpeg") is None:
+                raise RuntimeError(
+                    "ffmpeg not found. Install with:\n"
+                    "  sudo apt install -y ffmpeg\n"
+                    "Or set camera.rotation_mode = \"rotate\" in config."
+                )
+
+        if self._config.motion.enable_vision_motion:
+            try:
+                import numpy  # type: ignore  # noqa: F401
+            except Exception:
+                log.warning(
+                    "numpy not available; vision motion will be disabled automatically."
+                )
+
+        if not self._config.sensor.simulate:
+            log.warning(
+                "sensor.simulate=false but ToF I2C backend is not implemented; "
+                "no sensor events will be generated."
+            )
 
     async def run_forever(self) -> None:
         log.info("Controller starting (IDLE)")
