@@ -1,0 +1,2 @@
+[console_scripts]
+lego-cam = lego_cam.main:main

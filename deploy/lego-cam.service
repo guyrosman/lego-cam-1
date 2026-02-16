@@ -1,0 +1,29 @@
+[Unit]
+Description=lego-cam sensor-triggered recorder
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/lego-cam
+
+# If you installed as a venv, point ExecStart to that venv's python.
+# Example:
+# ExecStart=/opt/lego-cam/.venv/bin/lego-cam --config /etc/lego-cam/config.toml
+ExecStart=/usr/bin/lego-cam --config /etc/lego-cam/config.toml
+
+Restart=always
+RestartSec=2
+
+# Journald logging
+StandardOutput=journal
+StandardError=journal
+
+# A few pragmatic hardening defaults (adjust if you need device access)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+

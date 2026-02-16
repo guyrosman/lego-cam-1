@@ -1,0 +1,100 @@
+# lego-cam
+
+Production-oriented, low-power, sensor-triggered recording service for Raspberry Pi 5 (Python 3.11), using **Picamera2** and a pluggable sensor architecture.
+
+## Behavior
+- **IDLE**: sensors on, camera off, low CPU usage.
+- **Trigger**: sensor motion/presence turns camera on and starts recording immediately.
+- **Recording**:
+  - Saves video in **30s segments** (each file is ≤30 seconds).
+  - Motion events reset a **10 second** inactivity timer.
+- **Stop**: when there is **10s of no motion**, recording stops, camera turns off, returns to IDLE.
+- **Storage pruning**: if disk space is low, deletes the **oldest** videos first.
+
+## Install (Raspberry Pi OS)
+Picamera2 is normally installed via apt:
+
+```bash
+sudo apt update
+sudo apt install -y python3-picamera2 ffmpeg
+```
+
+Project install (editable):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+If you want YAML config support:
+
+```bash
+pip install -e ".[yaml]"
+```
+
+## Configuration
+The service loads TOML by default. Example:
+
+```toml
+[service]
+output_dir = "/var/lib/lego-cam/videos"
+min_free_mb = 1024
+segment_seconds = 30
+inactivity_seconds = 10
+
+[camera]
+backend = "picamera2"
+width = 1280
+height = 720
+fps = 30
+codec = "h264"
+rotation_mode = "rotate"  # rotate|ffmpeg_segment
+
+[motion]
+enable_vision_motion = true
+has_radar_or_lidar = false
+disable_vision_if_radar_or_lidar = true
+vision_motion_fps = 5
+vision_motion_sensitivity = 25
+
+[sensor]
+backend = "tof_i2c"
+poll_hz = 8
+simulate = true
+```
+
+Run:
+
+```bash
+lego-cam --config config.toml
+```
+
+## systemd
+See `[deploy/lego-cam.service](deploy/lego-cam.service)` for a unit template.
+
+Typical install layout (recommended):
+- Code in `/opt/lego-cam`
+- Config in `/etc/lego-cam/config.toml`
+- Videos in `/var/lib/lego-cam/videos`
+
+Example:
+
+```bash
+sudo mkdir -p /opt/lego-cam /etc/lego-cam /var/lib/lego-cam/videos
+sudo chown -R pi:pi /opt/lego-cam /var/lib/lego-cam
+
+# copy code to /opt/lego-cam (git clone or rsync), then:
+cd /opt/lego-cam
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+
+sudo cp deploy/lego-cam.service /etc/systemd/system/lego-cam.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now lego-cam
+
+# logs
+journalctl -u lego-cam -f
+```
+

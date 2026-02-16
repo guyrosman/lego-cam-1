@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lego-cam"
+version = "0.1.0"
+description = "Sensor-triggered recording service for Raspberry Pi (Picamera2 + pluggable sensors)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Guy", email = "unknown@example.com" }]
+
+# Notes:
+# - On Raspberry Pi OS, Picamera2 is typically installed via apt, not pip.
+# - PyYAML is optional; TOML config works with the stdlib (tomllib).
+dependencies = []
+
+[project.optional-dependencies]
+yaml = ["PyYAML>=6.0"]
+
+[project.scripts]
+lego-cam = "lego_cam.main:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

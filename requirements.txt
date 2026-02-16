@@ -1,0 +1,14 @@
+# Runtime pip dependencies.
+#
+# NOTE: On Raspberry Pi OS, Picamera2 is typically installed via apt:
+#   sudo apt install -y python3-picamera2
+#
+# ffmpeg is also typically installed via apt:
+#   sudo apt install -y ffmpeg
+
+# Used by vision motion detection (if installed; otherwise it auto-disables).
+numpy>=1.26
+
+# Optional: only needed if you use .yaml/.yml config files.
+PyYAML>=6.0
+
