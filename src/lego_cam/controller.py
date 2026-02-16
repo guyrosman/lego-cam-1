@@ -69,6 +69,7 @@ class RecordingController:
     def _build_recorder(self):
         if self._config.camera.backend != "picamera2":
             raise ValueError(f"Unsupported camera backend: {self._config.camera.backend}")
+
         from lego_cam.camera.picamera2_recorder import Picamera2Recorder
 
         return Picamera2Recorder(

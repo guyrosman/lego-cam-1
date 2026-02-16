@@ -70,6 +70,11 @@ Run:
 lego-cam --config config.toml
 ```
 
+## Testing in Thonny (Raspberry Pi)
+If you use **Thonny**, you can run without installing the console script:
+- Open `[thonny_run.py](thonny_run.py)` and press **Run**.
+- Point `CONFIG_PATH` at your config file.
+
 ## systemd
 See `[deploy/lego-cam.service](deploy/lego-cam.service)` for a unit template.
 
