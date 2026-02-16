@@ -1,4 +1,4 @@
-[service]
+im [service]
 output_dir = "./videos"
 min_free_mb = 256
 segment_seconds = 30
@@ -10,7 +10,7 @@ width = 1280
 height = 720
 fps = 30
 codec = "h264"
-rotation_mode = "rotate"  # rotate|ffmpeg_segment
+rotation_mode = "rotate"  # rotate|ffmpeg_segment (ffmpeg requires apt install ffmpeg)
 
 [motion]
 enable_vision_motion = true
@@ -22,5 +22,4 @@ vision_motion_sensitivity = 25
 [sensor]
 backend = "tof_i2c"
 poll_hz = 8
-simulate = true
-
+simulate = true  # true to run without hardware; false requires a real ToF sensor backend

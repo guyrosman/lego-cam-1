@@ -61,10 +61,24 @@ class RecordingController:
         log.info("Controller starting (IDLE)")
         self._state = State.IDLE
 
+        def _log_task_result(task: asyncio.Task[None], name: str) -> None:
+            try:
+                exc = task.exception()
+            except asyncio.CancelledError:
+                log.info("Task cancelled: %s", name)
+                return
+            if exc is not None:
+                log.exception("Task failed: %s", name, exc_info=exc)
+            else:
+                log.warning("Task exited unexpectedly: %s", name)
+
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(self._sensor_loop())
-            tg.create_task(self._camera_motion_loop())
-            tg.create_task(self._state_loop())
+            t1 = tg.create_task(self._sensor_loop())
+            t1.add_done_callback(lambda t: _log_task_result(t, "sensor_loop"))
+            t2 = tg.create_task(self._camera_motion_loop())
+            t2.add_done_callback(lambda t: _log_task_result(t, "camera_motion_loop"))
+            t3 = tg.create_task(self._state_loop())
+            t3.add_done_callback(lambda t: _log_task_result(t, "state_loop"))
 
     def _build_recorder(self):
         if self._config.camera.backend != "picamera2":
@@ -127,7 +141,11 @@ class RecordingController:
 
     async def _start_recording(self) -> None:
         self._storage.ensure_free_space()
-        await self._recorder.start()
+        try:
+            await self._recorder.start()
+        except Exception:
+            log.exception("Failed to start recorder")
+            raise
         self._state = State.RECORDING
         self._last_motion_t = monotonic()
 
@@ -137,4 +155,3 @@ class RecordingController:
         self._state = State.IDLE
         self._last_motion_t = None
         log.info("Controller back to IDLE (camera off)")
-
