@@ -7,10 +7,16 @@ from dataclasses import dataclass
 from enum import Enum
 from time import monotonic
 
-from lego_cam.config import AppConfig
-from lego_cam.motion.vision_motion import VisionMotionDetector
-from lego_cam.sensors.tof_i2c import ToFSensor
-from lego_cam.storage import StorageManager
+try:
+    from src.lego_cam.config import AppConfig  # type: ignore
+    from src.lego_cam.motion.vision_motion import VisionMotionDetector  # type: ignore
+    from src.lego_cam.sensors.tof_i2c import ToFSensor  # type: ignore
+    from src.lego_cam.storage import StorageManager  # type: ignore
+except ImportError:
+    from lego_cam.config import AppConfig
+    from lego_cam.motion.vision_motion import VisionMotionDetector
+    from lego_cam.sensors.tof_i2c import ToFSensor
+    from lego_cam.storage import StorageManager
 
 
 log = logging.getLogger(__name__)
@@ -126,7 +132,10 @@ class RecordingController:
         if self._config.camera.backend != "picamera2":
             raise ValueError(f"Unsupported camera backend: {self._config.camera.backend}")
 
-        from lego_cam.camera.picamera2_recorder import Picamera2Recorder
+        try:
+            from src.lego_cam.camera.picamera2_recorder import Picamera2Recorder  # type: ignore
+        except ImportError:
+            from lego_cam.camera.picamera2_recorder import Picamera2Recorder
 
         return Picamera2Recorder(
             output_dir=self._config.service.output_dir,

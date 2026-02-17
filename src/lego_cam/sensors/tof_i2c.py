@@ -6,7 +6,10 @@ import random
 from dataclasses import dataclass
 from typing import AsyncIterator
 
-from lego_cam.sensors.base import BaseSensor
+try:
+    from src.lego_cam.sensors.base import BaseSensor  # type: ignore
+except ImportError:
+    from lego_cam.sensors.base import BaseSensor
 
 
 log = logging.getLogger(__name__)
@@ -35,19 +38,17 @@ class ToFSensor(BaseSensor):
         period = 1.0 / float(self.poll_hz)
 
         if self.simulate:
-            # Debouncing: require 2 consecutive detections before yielding True
-            consecutive_detections = 0
+            # Simulation mode: generate motion events at a human-noticeable rate.
+            #
+            # The previous implementation required two consecutive random hits, which made
+            # events extremely rare (often minutes between events at 8Hz).
+            log.info("ToF sensor simulation enabled (poll_hz=%s)", self.poll_hz)
             while True:
                 await asyncio.sleep(period)
-                # 2% chance per tick (reduced from 5%) to simulate presence/motion
-                if random.random() < 0.02:
-                    consecutive_detections += 1
-                    if consecutive_detections >= 2:
-                        log.debug("Simulated ToF motion event (debounced)")
-                        yield True
-                        consecutive_detections = 0
-                else:
-                    consecutive_detections = 0
+                # ~5% chance per tick -> ~1 event / 2.5s on average at 8Hz
+                if random.random() < 0.05:
+                    log.debug("Simulated ToF motion event")
+                    yield True
                 # otherwise: no event
             return
 

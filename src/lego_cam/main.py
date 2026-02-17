@@ -6,10 +6,18 @@ import logging
 import signal
 from pathlib import Path
 
-from lego_cam.config import AppConfig, load_config
-from lego_cam.controller import RecordingController
-from lego_cam.logging_setup import setup_logging
-from lego_cam.storage import StorageManager
+try:
+    # When running from source via `python -m src.lego_cam.main`
+    from src.lego_cam.config import AppConfig, load_config  # type: ignore
+    from src.lego_cam.controller import RecordingController  # type: ignore
+    from src.lego_cam.logging_setup import setup_logging  # type: ignore
+    from src.lego_cam.storage import StorageManager  # type: ignore
+except ImportError:
+    # When installed as a package (console script: lego_cam.main:main)
+    from lego_cam.config import AppConfig, load_config
+    from lego_cam.controller import RecordingController
+    from lego_cam.logging_setup import setup_logging
+    from lego_cam.storage import StorageManager
 
 
 log = logging.getLogger(__name__)
@@ -59,7 +67,22 @@ def main() -> None:
 
     async def _main_task() -> None:
         runner = asyncio.create_task(_run(config))
-        await stop_event.wait()
+        stop_waiter = asyncio.create_task(stop_event.wait())
+
+        # Important: if the runner fails early (e.g. missing dependencies),
+        # don't hang forever waiting for SIGINT/SIGTERM.
+        done, pending = await asyncio.wait(
+            {runner, stop_waiter},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        if runner in done:
+            stop_waiter.cancel()
+            # Propagate exceptions (so the user actually sees what went wrong).
+            await runner
+            return
+
+        # Stop requested
         runner.cancel()
         try:
             await runner

@@ -13,10 +13,16 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from lego_cam.config import load_config
-from lego_cam.logging_setup import setup_logging
-from lego_cam.controller import RecordingController
-from lego_cam.storage import StorageManager
+try:
+    from src.lego_cam.config import load_config  # type: ignore
+    from src.lego_cam.logging_setup import setup_logging  # type: ignore
+    from src.lego_cam.controller import RecordingController  # type: ignore
+    from src.lego_cam.storage import StorageManager  # type: ignore
+except ImportError:
+    from lego_cam.config import load_config
+    from lego_cam.logging_setup import setup_logging
+    from lego_cam.controller import RecordingController
+    from lego_cam.storage import StorageManager
 
 
 CONFIG_PATH = Path("config.example.toml")  # change to /etc/lego-cam/config.toml on Pi
