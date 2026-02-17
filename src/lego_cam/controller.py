@@ -81,11 +81,18 @@ class RecordingController:
         try:
             import picamera2  # type: ignore  # noqa: F401
         except Exception as e:
+            import sys
             raise RuntimeError(
-                "Picamera2 is required. Install on Raspberry Pi OS with:\n"
-                "  sudo apt update\n"
-                "  sudo apt install -y python3-picamera2\n"
-                "Also ensure the camera is enabled (raspi-config -> Interface Options)."
+                "Picamera2 is required but not found in this Python.\n"
+                "Current interpreter: %s\n\n"
+                "Picamera2 is installed via apt (system Python), not pip.\n"
+                "  sudo apt install -y python3-picamera2\n\n"
+                "If you run from Thonny: use the interpreter that has picamera2.\n"
+                "  Tools → Options → Interpreter → choose\n"
+                "  \"The same interpreter which runs Thonny (default)\".\n"
+                "Do NOT use the .venv interpreter unless you created it with:\n"
+                "  python3 -m venv .venv --system-site-packages"
+                % (getattr(sys, "executable", "unknown"))
             ) from e
 
         if self._config.camera.rotation_mode == "ffmpeg_segment":
