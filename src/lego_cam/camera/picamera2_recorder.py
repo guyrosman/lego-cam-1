@@ -135,11 +135,19 @@ class Picamera2Recorder:
 
         if self._ffmpeg_proc is not None:
             try:
+                # Close stdin so ffmpeg can flush and finalize segments.
+                if self._ffmpeg_proc.stdin is not None:
+                    try:
+                        self._ffmpeg_proc.stdin.close()
+                    except Exception:
+                        pass
+
                 self._ffmpeg_proc.terminate()
                 self._ffmpeg_proc.wait(timeout=3)
             except Exception:
                 pass
-            self._ffmpeg_proc = None
+            finally:
+                self._ffmpeg_proc = None
 
         self._picam2 = None
         self._encoder = None
