@@ -35,6 +35,8 @@ class Picamera2Recorder:
     fps: int
     rotation_mode: str
     segment_seconds: int
+    # When true, show a live preview window on the attached display (developer mode).
+    developer_mode: bool = False
 
     _picam2: Any | None = None
     _encoder: Any | None = None
@@ -72,6 +74,24 @@ class Picamera2Recorder:
         # Store frames for motion detection (controller will sample while recording).
         # Set callback after encoder is ready but before starting camera
         self._picam2.pre_callback = self._pre_callback
+
+        # Optional on‑screen preview for developer mode.
+        if self.developer_mode:
+            try:
+                from picamera2 import Preview  # type: ignore
+
+                # Try to start a Qt preview (HDMI / desktop); fall back silently if not available.
+                try:
+                    self._picam2.start_preview(Preview.QT)
+                except Exception:
+                    try:
+                        self._picam2.start_preview()
+                    except Exception:
+                        pass
+                log.info("Developer preview enabled on attached display")
+            except Exception:
+                # Preview API not available; keep recording headless.
+                log.info("Developer preview requested but not available; continuing headless")
 
         if self.rotation_mode == "ffmpeg_segment":
             await self._start_ffmpeg_segmenting(FileOutput)

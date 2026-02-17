@@ -11,6 +11,8 @@ class ServiceConfig:
     min_free_mb: int = 1024
     segment_seconds: int = 30
     inactivity_seconds: int = 10
+    # When true, enable on-screen preview + rich status logs.
+    developer_mode: bool = False
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,9 @@ def load_config(path: str | Path) -> AppConfig:
             ),
             inactivity_seconds=int(
                 _deep_get(raw, ["service", "inactivity_seconds"], ServiceConfig().inactivity_seconds)
+            ),
+            developer_mode=bool(
+                _deep_get(raw, ["service", "developer_mode"], ServiceConfig().developer_mode)
             ),
         ),
         camera=CameraConfig(

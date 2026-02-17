@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
+import subprocess
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from time import monotonic
 
 try:
@@ -43,6 +46,7 @@ class RecordingController:
         self._config = config
         self._storage = storage
         self._state: State = State.IDLE
+        self._developer_mode: bool = config.service.developer_mode
 
         self._validate_environment()
 
@@ -65,6 +69,7 @@ class RecordingController:
         )
 
         self._last_motion_t: float | None = None
+        self._last_motion_event: MotionEvent | None = None
 
     def _validate_environment(self) -> None:
         if self._config.camera.backend != "picamera2":
@@ -127,6 +132,9 @@ class RecordingController:
             t2.add_done_callback(lambda t: _log_task_result(t, "camera_motion_loop"))
             t3 = tg.create_task(self._state_loop())
             t3.add_done_callback(lambda t: _log_task_result(t, "state_loop"))
+            if self._developer_mode:
+                t4 = tg.create_task(self._dev_status_loop())
+                t4.add_done_callback(lambda t: _log_task_result(t, "dev_status_loop"))
 
     def _build_recorder(self):
         if self._config.camera.backend != "picamera2":
@@ -144,12 +152,21 @@ class RecordingController:
             fps=self._config.camera.fps,
             rotation_mode=self._config.camera.rotation_mode,
             segment_seconds=self._config.service.segment_seconds,
+            developer_mode=self._developer_mode,
         )
 
     async def _sensor_loop(self) -> None:
+        """
+        Consume boolean motion events from the ToF sensor backend.
+
+        The sensor is allowed to *start* a recording from IDLE, but once
+        recording is running only the camera is allowed to extend the timer.
+        """
         async for ev in self._sensor.events():
             if ev:
-                await self._on_motion(MotionEvent(source="sensor", t_monotonic=monotonic(), score=1.0))
+                await self._on_motion(
+                    MotionEvent(source="sensor", t_monotonic=monotonic(), score=1.0)
+                )
 
     async def _camera_motion_loop(self) -> None:
         """
@@ -187,14 +204,94 @@ class RecordingController:
             time_since_last = ev.t_monotonic - self._last_motion_t
             if time_since_last < 0.5:
                 return  # Ignore rapid-fire events
-        
-        self._last_motion_t = ev.t_monotonic
+
+        self._last_motion_event = ev
+
         if self._state == State.IDLE:
+            # Any source (sensor or camera) can start recording from IDLE.
+            self._last_motion_t = ev.t_monotonic
             log.info("Motion detected (%s) -> starting recording", ev.source)
             await self._start_recording()
-        else:
-            # RECORDING: just reset timer
+            return
+
+        # RECORDING:
+        # Only camera motion is allowed to extend the inactivity timer.
+        if ev.source == "camera":
+            self._last_motion_t = ev.t_monotonic
             log.debug("Motion detected (%s) -> reset inactivity timer", ev.source)
+        else:
+            log.debug(
+                "Motion detected (%s) while recording -> ignored for inactivity timer",
+                ev.source,
+            )
+
+    async def _dev_status_loop(self) -> None:
+        """
+        Periodically log rich status information for developer mode:
+        - distance from sensor (if available)
+        - camera/recorder state
+        - time since last motion & source
+        - basic CPU temperature / load / voltage
+        """
+        while True:
+            await asyncio.sleep(1.0)
+
+            # Time since last motion
+            now = monotonic()
+            last_motion_age = None
+            if self._last_motion_t is not None:
+                last_motion_age = now - self._last_motion_t
+
+            last_source = self._last_motion_event.source if self._last_motion_event else None
+
+            # Sensor distance (if backend exposes it)
+            distance_mm = getattr(self._sensor, "debug_distance_mm", None)
+
+            # CPU temperature (Raspberry Pi typical path)
+            cpu_temp_c: float | None = None
+            temp_path = Path("/sys/class/thermal/thermal_zone0/temp")
+            try:
+                if temp_path.exists():
+                    raw = temp_path.read_text().strip()
+                    cpu_temp_c = float(raw) / 1000.0
+            except Exception:
+                cpu_temp_c = None
+
+            # CPU load (1‑minute average)
+            cpu_load_1: float | None = None
+            try:
+                cpu_load_1 = os.getloadavg()[0]
+            except (AttributeError, OSError):
+                cpu_load_1 = None
+
+            # Core voltage (if vcgencmd is available)
+            voltage_v: float | None = None
+            try:
+                proc = subprocess.run(
+                    ["vcgencmd", "measure_volts", "core"],
+                    capture_output=True,
+                    text=True,
+                    timeout=0.5,
+                    check=False,
+                )
+                out = proc.stdout.strip()
+                # Example: "volt=0.8625V"
+                if "volt=" in out and out.endswith("V"):
+                    voltage_v = float(out.split("volt=")[1].rstrip("V"))
+            except Exception:
+                voltage_v = None
+
+            log.info(
+                "DEV status | state=%s distance_mm=%s last_motion_age=%.2fs last_source=%s "
+                "cpu_temp_c=%s cpu_load_1=%.2f voltage_v=%s",
+                self._state.value,
+                f"{distance_mm:.1f}" if isinstance(distance_mm, (int, float)) else "n/a",
+                last_motion_age if last_motion_age is not None else -1.0,
+                last_source or "n/a",
+                f"{cpu_temp_c:.1f}" if isinstance(cpu_temp_c, (int, float)) else "n/a",
+                cpu_load_1 if cpu_load_1 is not None else -1.0,
+                f"{voltage_v:.3f}" if isinstance(voltage_v, (int, float)) else "n/a",
+            )
 
     async def _start_recording(self) -> None:
         self._storage.ensure_free_space()

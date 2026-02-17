@@ -30,6 +30,8 @@ class ToFSensor(BaseSensor):
 
     poll_hz: int = 8
     simulate: bool = False
+    # For developer-mode status display: most recent distance estimate in mm (if available).
+    debug_distance_mm: float | None = None
 
     async def events(self) -> AsyncIterator[bool]:
         if self.poll_hz <= 0:
@@ -38,16 +40,29 @@ class ToFSensor(BaseSensor):
         period = 1.0 / float(self.poll_hz)
 
         if self.simulate:
-            # Simulation mode: generate motion events at a human-noticeable rate.
+            # Simulation mode with a simple "distance" model and hysteresis.
             #
-            # The previous implementation required two consecutive random hits, which made
-            # events extremely rare (often minutes between events at 8Hz).
-            log.info("ToF sensor simulation enabled (poll_hz=%s)", self.poll_hz)
+            # We keep a virtual distance in mm and only emit a motion event
+            # when the distance changes by >= 40mm relative to the last stable
+            # value. This approximates "only significant movements".
+            log.info("ToF sensor simulation enabled (poll_hz=%s, hysteresis=±40mm)", self.poll_hz)
+            baseline_mm = 600.0
+            stable_mm = baseline_mm
+            current_mm = baseline_mm
+
             while True:
                 await asyncio.sleep(period)
-                # ~5% chance per tick -> ~1 event / 2.5s on average at 8Hz
-                if random.random() < 0.05:
-                    log.debug("Simulated ToF motion event")
+
+                # Small jitter (sensor noise / tiny movements).
+                jitter = random.uniform(-5.0, 5.0)
+                current_mm = max(50.0, current_mm + jitter)
+                self.debug_distance_mm = current_mm
+
+                if abs(current_mm - stable_mm) >= 40.0:
+                    log.debug(
+                        "Simulated ToF motion event: %.1fmm -> %.1fmm", stable_mm, current_mm
+                    )
+                    stable_mm = current_mm
                     yield True
                 # otherwise: no event
             return

@@ -3,6 +3,7 @@ output_dir = "./videos"
 min_free_mb = 256
 segment_seconds = 30
 inactivity_seconds = 10
+developer_mode = false  # true = on-screen preview + rich status logs; false = normal headless
 
 [camera]
 backend = "picamera2"
