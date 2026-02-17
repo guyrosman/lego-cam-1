@@ -4,7 +4,7 @@ import asyncio
 import logging
 import random
 from dataclasses import dataclass
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional
 
 try:
     from src.lego_cam.sensors.base import BaseSensor  # type: ignore
@@ -30,8 +30,10 @@ class ToFSensor(BaseSensor):
 
     poll_hz: int = 8
     simulate: bool = False
+    i2c_bus: int = 1
+    i2c_address: int = 0x41
     # For developer-mode status display: most recent distance estimate in mm (if available).
-    debug_distance_mm: float | None = None
+    debug_distance_mm: Optional[float] = None
 
     async def events(self) -> AsyncIterator[bool]:
         if self.poll_hz <= 0:
@@ -67,10 +69,93 @@ class ToFSensor(BaseSensor):
                 # otherwise: no event
             return
 
-        # Real hardware scaffold
-        # NOTE: Avoid adding dependencies until the exact ToF model is selected.
-        log.warning("ToF sensor backend is not implemented (set sensor.simulate=true for now)")
-        while True:
-            await asyncio.sleep(period)
-            # no event
+        # Real hardware path: SparkFun TMF8820 via tmf882x-driver.
+        try:
+            from smbus2 import SMBus  # type: ignore
+            from tmf882x import TMF882x, TMF882xException  # type: ignore
+        except Exception:  # pragma: no cover - import-time failure on non-Pi dev machines
+            log.error(
+                "TMF8820 backend requested but tmf882x-driver or smbus2 is not installed. "
+                "Install with: pip install tmf882x-driver  "
+                "or set sensor.simulate=true in the config."
+            )
+            while True:
+                await asyncio.sleep(period)
+                # No events; configuration is invalid.
+
+        log.info(
+            "TMF8820 hardware mode enabled (bus=%s, addr=0x%02X, hysteresis=±40mm)",
+            self.i2c_bus,
+            self.i2c_address,
+        )
+
+        bus: SMBus | None = None
+        tof: TMF882x | None = None
+        baseline_mm: Optional[float] = None
+        stable_mm: Optional[float] = None
+
+        try:
+            bus = SMBus(self.i2c_bus)
+            tof = TMF882x(bus, address=self.i2c_address)
+            tof.enable()
+
+            while True:
+                await asyncio.sleep(period)
+                try:
+                    m = tof.measure()
+                except TMF882xException as e:
+                    log.warning("TMF8820 measurement error: %s", e)
+                    continue
+                except Exception as e:  # pragma: no cover
+                    log.exception("Unexpected TMF8820 error: %s", e)
+                    continue
+
+                # Collapse the measurement grid to a single representative distance:
+                # use the minimum non-zero primary distance across all SPADs.
+                distances: list[float] = []
+                try:
+                    for row in m.primary_grid:
+                        for d in row:
+                            if d > 0:
+                                distances.append(float(d))
+                except Exception:
+                    # If grid parsing fails, skip this sample.
+                    continue
+
+                if not distances:
+                    self.debug_distance_mm = None
+                    continue
+
+                current_mm = min(distances)
+                self.debug_distance_mm = current_mm
+
+                if baseline_mm is None:
+                    baseline_mm = current_mm
+                    stable_mm = current_mm
+                    continue
+
+                if stable_mm is None:
+                    stable_mm = current_mm
+                    continue
+
+                if abs(current_mm - stable_mm) >= 40.0:
+                    log.debug(
+                        "TMF8820 motion event: %.1fmm -> %.1fmm", stable_mm, current_mm
+                    )
+                    stable_mm = current_mm
+                    yield True
+                # otherwise: no event
+        finally:
+            try:
+                if tof is not None:
+                    try:
+                        tof.standby()
+                    except Exception:
+                        pass
+            finally:
+                if bus is not None:
+                    try:
+                        bus.close()
+                    except Exception:
+                        pass
 

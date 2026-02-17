@@ -105,9 +105,8 @@ class RecordingController:
                 )
 
         if not self._config.sensor.simulate:
-            log.warning(
-                "sensor.simulate=false but ToF I2C backend is not implemented; "
-                "no sensor events will be generated."
+            log.info(
+                "Using TMF8820 ToF sensor in hardware mode (sensor.simulate=false)."
             )
 
     async def run_forever(self) -> None:

@@ -12,3 +12,6 @@ numpy>=1.26
 # Optional: only needed if you use .yaml/.yml config files.
 PyYAML>=6.0
 
+# TMF8820/TMF8821 Time-of-Flight sensor driver (used with SparkFun TMF8820 board).
+tmf882x-driver>=0.1.0
+
