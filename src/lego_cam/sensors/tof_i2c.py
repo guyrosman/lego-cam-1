@@ -110,23 +110,34 @@ class ToFSensor(BaseSensor):
                     log.exception("Unexpected TMF8820 error: %s", e)
                     continue
 
-                # Collapse the measurement grid to a single representative distance:
-                # use the minimum non-zero primary distance across all SPADs.
+                # Collapse the measurement grid to a single representative distance.
+                # Only use zones with sufficient confidence (low confidence = noise/wrong).
+                # Use median of valid distances to avoid one bad zone dominating.
+                MIN_CONFIDENCE = 10  # 0–255; below this we ignore the zone
                 distances: list[float] = []
                 try:
-                    for row in m.primary_grid:
-                        for d in row:
-                            if d > 0:
+                    for dist_row, conf_row in zip(
+                        m.primary_grid,
+                        m.primary_grid_confidence,
+                    ):
+                        for d, c in zip(dist_row, conf_row):
+                            if d > 0 and c >= MIN_CONFIDENCE:
                                 distances.append(float(d))
                 except Exception:
-                    # If grid parsing fails, skip this sample.
                     continue
 
                 if not distances:
-                    self.debug_distance_mm = None
+                    # No zones above confidence threshold; keep previous value.
                     continue
 
-                current_mm = min(distances)
+                # Median is more stable than min when one zone is noisy
+                distances.sort()
+                mid = len(distances) // 2
+                current_mm = (
+                    distances[mid]
+                    if len(distances) % 2
+                    else (distances[mid - 1] + distances[mid]) / 2.0
+                )
                 self.debug_distance_mm = current_mm
 
                 if baseline_mm is None:
