@@ -102,29 +102,56 @@ class ToFSensor(BaseSensor):
         baseline_mm: Optional[float] = None
         stable_mm: Optional[float] = None
 
-        def _raise_i2c_hint(e: OSError) -> None:
+        I2C_RETRIES = 3
+        I2C_RETRY_DELAY = 1.5
+
+        def _raise_i2c_hint(e: OSError, after_retries: bool = False) -> None:
             if getattr(e, "errno", None) == 121:
-                raise RuntimeError(
+                msg = (
                     "TMF8820 I2C errno 121 (Remote I/O).\n"
-                    "  • Add your user to the i2c group:  sudo usermod -aG i2c $USER\n"
-                    "  • Log out and back in (or reboot), then try again.\n"
-                    "  • If using Thonny: restart Thonny after adding yourself to i2c.\n"
-                    "  • Check wiring (3.3V, GND, SDA, SCL) and that nothing else uses I2C."
-                ) from e
+                    "  • Power cycle: unplug the TMF8820 (or its 3.3V/GND), wait 5s, plug back in; or reboot the Pi.\n"
+                    "  • Close any other program that might use I2C (other Python scripts, calibration script).\n"
+                    "  • Check wiring: 3.3V, GND, SDA→GPIO2, SCL→GPIO3; no 5V.\n"
+                    "  • If your other TMF8820 script works, run that from the same place (Thonny vs terminal) to compare."
+                )
+                if after_retries:
+                    msg = "TMF8820 I2C errno 121 after %s retries.\n" % I2C_RETRIES + msg
+                raise RuntimeError(msg) from e
             raise
 
         try:
-            try:
-                bus = SMBus(self.i2c_bus)
-            except OSError as e:
-                _raise_i2c_hint(e)
+            last_err: OSError | None = None
+            for attempt in range(1, I2C_RETRIES + 1):
+                if attempt > 1:
+                    if bus is not None:
+                        try:
+                            bus.close()
+                        except Exception:
+                            pass
+                        bus = None
+                    log.info("TMF8820 I2C retry %s/%s in %.1fs...", attempt, I2C_RETRIES, I2C_RETRY_DELAY)
+                    await asyncio.sleep(I2C_RETRY_DELAY)
 
-            await asyncio.sleep(1.0)  # longer delay after opening bus (helps avoid 121)
-            tof = TMF882x(bus, address=self.i2c_address)
-            try:
-                tof.enable()
-            except OSError as e:
-                _raise_i2c_hint(e)
+                try:
+                    bus = SMBus(self.i2c_bus)
+                except OSError as e:
+                    last_err = e
+                    continue
+
+                await asyncio.sleep(1.0)
+                tof = TMF882x(bus, address=self.i2c_address)
+                try:
+                    tof.enable()
+                    last_err = None
+                    break
+                except OSError as e:
+                    last_err = e
+                    if attempt == I2C_RETRIES:
+                        _raise_i2c_hint(e, after_retries=True)
+            else:
+                if last_err is not None:
+                    _raise_i2c_hint(last_err, after_retries=True)
+                raise RuntimeError("TMF8820 enable failed")
 
             await asyncio.sleep(0.5)  # match working code: delay after enable
 
