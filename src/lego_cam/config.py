@@ -39,6 +39,10 @@ class SensorConfig:
     backend: str = "tof_i2c"  # tof_i2c
     poll_hz: int = 8
     simulate: bool = False
+    # TMF8820 hardware only (ignored when simulate=true):
+    tof_min_confidence: int = 10  # 0-255; zones below this are ignored
+    tof_calibration_file: str = ""  # path to .bin from scripts/calibrate_tmf8820.py
+    tof_smooth_alpha: float = 0.25  # 0=no smoothing, 0.2-0.4=moderate smoothing
 
 
 @dataclass(frozen=True)
@@ -134,6 +138,15 @@ def load_config(path: str | Path) -> AppConfig:
             backend=str(_deep_get(raw, ["sensor", "backend"], SensorConfig().backend)),
             poll_hz=int(_deep_get(raw, ["sensor", "poll_hz"], SensorConfig().poll_hz)),
             simulate=bool(_deep_get(raw, ["sensor", "simulate"], SensorConfig().simulate)),
+            tof_min_confidence=int(
+                _deep_get(raw, ["sensor", "tof_min_confidence"], SensorConfig().tof_min_confidence)
+            ),
+            tof_calibration_file=str(
+                _deep_get(raw, ["sensor", "tof_calibration_file"], SensorConfig().tof_calibration_file)
+            ),
+            tof_smooth_alpha=float(
+                _deep_get(raw, ["sensor", "tof_smooth_alpha"], SensorConfig().tof_smooth_alpha)
+            ),
         ),
     )
 

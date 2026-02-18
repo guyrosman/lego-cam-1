@@ -23,4 +23,8 @@ vision_motion_sensitivity = 30  # Higher = less sensitive (default 25, increased
 [sensor]
 backend = "tof_i2c"
 poll_hz = 8
-simulate = true  # true to run without hardware; false requires a real ToF sensor backend
+simulate = true  # false = real TMF8820 hardware
+# TMF8820 only (when simulate = false):
+# tof_min_confidence = 10   # 0-255; lower = accept noisier zones (try 5 if distance is missing)
+# tof_calibration_file = "" # path to .bin from: python3 scripts/calibrate_tmf8820.py -o tmf8820_cal.bin
+# tof_smooth_alpha = 0.25   # 0 = no smoothing; 0.2-0.4 = smoother displayed distance

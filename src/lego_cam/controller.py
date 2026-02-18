@@ -51,7 +51,13 @@ class RecordingController:
         self._validate_environment()
 
         # Backends
-        self._sensor = ToFSensor(poll_hz=config.sensor.poll_hz, simulate=config.sensor.simulate)
+        self._sensor = ToFSensor(
+            poll_hz=config.sensor.poll_hz,
+            simulate=config.sensor.simulate,
+            min_confidence=config.sensor.tof_min_confidence,
+            calibration_file=config.sensor.tof_calibration_file or "",
+            smooth_alpha=config.sensor.tof_smooth_alpha,
+        )
         self._recorder = self._build_recorder()
 
         vision_enabled = config.motion.enable_vision_motion

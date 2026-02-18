@@ -4,6 +4,7 @@ import asyncio
 import logging
 import random
 from dataclasses import dataclass
+from pathlib import Path
 from typing import AsyncIterator, Optional
 
 try:
@@ -32,6 +33,9 @@ class ToFSensor(BaseSensor):
     simulate: bool = False
     i2c_bus: int = 1
     i2c_address: int = 0x41
+    min_confidence: int = 10
+    calibration_file: str = ""
+    smooth_alpha: float = 0.25  # EMA: 0=off, 0.2-0.4=moderate
     # For developer-mode status display: most recent distance estimate in mm (if available).
     debug_distance_mm: Optional[float] = None
 
@@ -99,6 +103,24 @@ class ToFSensor(BaseSensor):
             tof = TMF882x(bus, address=self.i2c_address)
             tof.enable()
 
+            if self.calibration_file:
+                cal_path = Path(self.calibration_file)
+                if cal_path.exists():
+                    cal_bytes = cal_path.read_bytes()
+                    if len(cal_bytes) == 188:
+                        tof.write_calibration(cal_bytes)
+                        log.info("TMF8820 loaded calibration from %s", cal_path)
+                    else:
+                        log.warning(
+                            "TMF8820 calibration file %s has wrong size (%s bytes, need 188); skipping",
+                            cal_path,
+                            len(cal_bytes),
+                        )
+                else:
+                    log.warning("TMF8820 calibration file not found: %s", cal_path)
+
+            smoothed_mm: Optional[float] = None
+
             while True:
                 await asyncio.sleep(period)
                 try:
@@ -110,10 +132,7 @@ class ToFSensor(BaseSensor):
                     log.exception("Unexpected TMF8820 error: %s", e)
                     continue
 
-                # Collapse the measurement grid to a single representative distance.
-                # Only use zones with sufficient confidence (low confidence = noise/wrong).
-                # Use median of valid distances to avoid one bad zone dominating.
-                MIN_CONFIDENCE = 10  # 0–255; below this we ignore the zone
+                # Collapse the measurement grid: only zones with sufficient confidence.
                 distances: list[float] = []
                 try:
                     for dist_row, conf_row in zip(
@@ -121,23 +140,29 @@ class ToFSensor(BaseSensor):
                         m.primary_grid_confidence,
                     ):
                         for d, c in zip(dist_row, conf_row):
-                            if d > 0 and c >= MIN_CONFIDENCE:
+                            if d > 0 and c >= self.min_confidence:
                                 distances.append(float(d))
                 except Exception:
                     continue
 
                 if not distances:
-                    # No zones above confidence threshold; keep previous value.
                     continue
 
-                # Median is more stable than min when one zone is noisy
                 distances.sort()
                 mid = len(distances) // 2
-                current_mm = (
+                raw_mm = (
                     distances[mid]
                     if len(distances) % 2
                     else (distances[mid - 1] + distances[mid]) / 2.0
                 )
+
+                if self.smooth_alpha > 0 and smoothed_mm is not None:
+                    current_mm = self.smooth_alpha * raw_mm + (1.0 - self.smooth_alpha) * smoothed_mm
+                    smoothed_mm = current_mm
+                else:
+                    current_mm = raw_mm
+                    smoothed_mm = raw_mm
+
                 self.debug_distance_mm = current_mm
 
                 if baseline_mm is None:
