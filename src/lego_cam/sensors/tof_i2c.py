@@ -100,8 +100,10 @@ class ToFSensor(BaseSensor):
 
         try:
             bus = SMBus(self.i2c_bus)
+            await asyncio.sleep(0.5)  # match working code: delay after opening I2C bus
             tof = TMF882x(bus, address=self.i2c_address)
             tof.enable()
+            await asyncio.sleep(0.5)  # match working code: delay after enable
 
             if self.calibration_file:
                 cal_path = Path(self.calibration_file)
@@ -119,11 +121,16 @@ class ToFSensor(BaseSensor):
                 else:
                     log.warning("TMF8820 calibration file not found: %s", cal_path)
             else:
-                log.warning(
-                    "TMF8820 running WITHOUT calibration — distance may be wrong. "
-                    "Run: python3 scripts/calibrate_tmf8820.py -o tmf8820_calibration.bin "
-                    "Then set sensor.tof_calibration_file in config."
-                )
+                # Match working code: calibrate at runtime if not OK (no file needed)
+                if not getattr(tof, "calibration_ok", True):
+                    log.info("TMF8820 calibrating...")
+                    try:
+                        tof.calibrate()
+                        log.info("TMF8820 calibration done")
+                    except TMF882xException as e:
+                        log.warning("TMF8820 calibration failed: %s", e)
+                else:
+                    log.info("TMF8820 calibration OK (no file)")
 
             smoothed_mm: Optional[float] = None
             first_sample_logged = False
@@ -139,29 +146,13 @@ class ToFSensor(BaseSensor):
                     log.exception("Unexpected TMF8820 error: %s", e)
                     continue
 
-                # Collapse the measurement grid: only zones with sufficient confidence.
-                distances: list[float] = []
-                try:
-                    for dist_row, conf_row in zip(
-                        m.primary_grid,
-                        m.primary_grid_confidence,
-                    ):
-                        for d, c in zip(dist_row, conf_row):
-                            if d > 0 and c >= self.min_confidence:
-                                distances.append(float(d))
-                except Exception:
-                    continue
+                # Match your working code: accept all distances > 0, use closest (min).
+                distances = [float(r.distance) for r in m.results if r.distance > 0]
 
                 if not distances:
                     continue
 
-                distances.sort()
-                mid = len(distances) // 2
-                raw_mm = (
-                    distances[mid]
-                    if len(distances) % 2
-                    else (distances[mid - 1] + distances[mid]) / 2.0
-                )
+                raw_mm = min(distances)  # closest object, same as your code
 
                 if self.smooth_alpha > 0 and smoothed_mm is not None:
                     current_mm = self.smooth_alpha * raw_mm + (1.0 - self.smooth_alpha) * smoothed_mm
@@ -175,10 +166,9 @@ class ToFSensor(BaseSensor):
                 if not first_sample_logged:
                     first_sample_logged = True
                     log.info(
-                        "TMF8820 first sample: distance_mm=%.1f (%s zones above confidence %s)",
+                        "TMF8820 first sample: distance_mm=%.1f (%s zones with d>0)",
                         current_mm,
                         len(distances),
-                        self.min_confidence,
                     )
 
                 if baseline_mm is None:

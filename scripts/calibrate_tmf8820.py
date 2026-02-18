@@ -51,9 +51,10 @@ def main() -> int:
 
     try:
         bus = SMBus(args.bus)
-        time.sleep(0.05)  # brief delay after opening I2C bus (can help avoid errno 121)
+        time.sleep(0.5)  # match working code: delay after opening I2C bus
         tof = TMF882x(bus, address=args.address)
         tof.enable()
+        time.sleep(0.5)  # match working code: delay after enable
         print("Running calibration (this may take a few seconds)...")
         cal_bytes = tof.calibrate()
         tof.standby()
