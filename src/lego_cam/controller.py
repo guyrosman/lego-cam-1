@@ -58,6 +58,7 @@ class RecordingController:
             calibration_file=config.sensor.tof_calibration_file or "",
             smooth_alpha=config.sensor.tof_smooth_alpha,
             hysteresis_mm=float(config.sensor.tof_hysteresis_mm),
+            confirm_ms=float(config.sensor.tof_confirm_ms),
         )
         self._recorder = self._build_recorder()
 

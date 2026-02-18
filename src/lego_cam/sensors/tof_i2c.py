@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,8 +38,12 @@ class ToFSensor(BaseSensor):
     calibration_file: str = ""
     smooth_alpha: float = 0.25  # EMA: 0=off, 0.2-0.4=moderate
     hysteresis_mm: float = 80.0  # motion = distance change >= this (mm); increase to reduce false triggers
+    confirm_ms: float = 0.0  # require change to persist this many ms (high-freq samples); 0 = no persistence
     # For developer-mode status display: most recent distance estimate in mm (if available).
     debug_distance_mm: Optional[float] = None
+
+    # When confirm_ms > 0 we sample at this rate to check persistence (samples per second)
+    CONFIRM_POLL_HZ: int = 50
 
     async def events(self) -> AsyncIterator[bool]:
         if self.poll_hz <= 0:
@@ -91,12 +96,21 @@ class ToFSensor(BaseSensor):
                 await asyncio.sleep(period)
                 # No events; configuration is invalid.
 
+        confirm_period = 1.0 / self.CONFIRM_POLL_HZ if self.confirm_ms > 0 else period
+        required_consecutive = (
+            max(1, math.ceil(self.confirm_ms / 1000.0 * self.CONFIRM_POLL_HZ))
+            if self.confirm_ms > 0
+            else 1
+        )
         log.info(
-            "TMF8820 hardware mode (bus=%s, addr=0x%02X, hysteresis=±%.0fmm, smooth_alpha=%s = raw distance)",
+            "TMF8820 hardware mode (bus=%s, addr=0x%02X, hysteresis=±%.0fmm, smooth_alpha=%s, confirm_ms=%s → %s consecutive at %sHz)",
             self.i2c_bus,
             self.i2c_address,
             self.hysteresis_mm,
             self.smooth_alpha,
+            self.confirm_ms,
+            required_consecutive,
+            self.CONFIRM_POLL_HZ if self.confirm_ms > 0 else self.poll_hz,
         )
 
         bus: SMBus | None = None
@@ -186,9 +200,10 @@ class ToFSensor(BaseSensor):
 
             smoothed_mm: Optional[float] = None
             first_sample_logged = False
+            consecutive_above = 0  # for persistence check
 
             while True:
-                await asyncio.sleep(period)
+                await asyncio.sleep(confirm_period)
                 try:
                     m = tof.measure()
                 except TMF882xException as e:
@@ -235,12 +250,20 @@ class ToFSensor(BaseSensor):
                     continue
 
                 if abs(current_mm - stable_mm) >= self.hysteresis_mm:
-                    log.debug(
-                        "TMF8820 motion event: %.1fmm -> %.1fmm", stable_mm, current_mm
-                    )
-                    stable_mm = current_mm
-                    yield True
-                # otherwise: no event
+                    consecutive_above += 1
+                    if consecutive_above >= required_consecutive:
+                        log.debug(
+                            "TMF8820 motion event (confirmed %s samples): %.1fmm -> %.1fmm",
+                            required_consecutive,
+                            stable_mm,
+                            current_mm,
+                        )
+                        stable_mm = current_mm
+                        consecutive_above = 0
+                        yield True
+                else:
+                    consecutive_above = 0
+                # otherwise: no event yet or reset
         finally:
             try:
                 if tof is not None:

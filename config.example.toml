@@ -30,3 +30,4 @@ simulate = false  # MUST be false for real TMF8820; true = fake distance for tes
 # tof_calibration_file = "" # path to .bin from: python3 scripts/calibrate_tmf8820.py -o tmf8820_cal.bin
 # tof_smooth_alpha = 0.25   # 0 = no smoothing; 0.2-0.4 = smoother displayed distance
 # tof_hysteresis_mm = 80    # motion = distance change >= this (mm); increase to reduce false triggers (e.g. 100, 120)
+# tof_confirm_ms = 100     # require change to persist this many ms at 50Hz (filters blips); 0 = off
