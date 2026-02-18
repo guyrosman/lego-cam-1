@@ -75,31 +75,21 @@ If you use **Thonny**, you can run without installing the console script:
 - Open `[thonny_run.py](thonny_run.py)` and press **Run**.
 - Point `CONFIG_PATH` at your config file.
 
-## systemd
-See `[deploy/lego-cam.service](deploy/lego-cam.service)` for a unit template.
+## Run as a service (no screen)
 
-Typical install layout (recommended):
-- Code in `/opt/lego-cam`
-- Config in `/etc/lego-cam/config.toml`
-- Videos in `/var/lib/lego-cam/videos`
+To run lego-cam at boot without a monitor or Thonny, use the systemd service:
 
-Example:
+1. **Setup:** [deploy/SERVICE.md](deploy/SERVICE.md) — create config, install the unit, enable and start.
+2. **Unit file:** [deploy/lego-cam.service](deploy/lego-cam.service) — edit `User`, `WorkingDirectory`, and `--config` path if needed.
+
+Quick version (after editing the service file for your paths and user):
 
 ```bash
-sudo mkdir -p /opt/lego-cam /etc/lego-cam /var/lib/lego-cam/videos
-sudo chown -R pi:pi /opt/lego-cam /var/lib/lego-cam
-
-# copy code to /opt/lego-cam (git clone or rsync), then:
-cd /opt/lego-cam
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-
-sudo cp deploy/lego-cam.service /etc/systemd/system/lego-cam.service
+sudo mkdir -p /etc/lego-cam
+# put your config.toml in /etc/lego-cam/
+sudo cp deploy/lego-cam.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now lego-cam
-
-# logs
-journalctl -u lego-cam -f
+journalctl -u lego-cam -f   # live logs
 ```
 

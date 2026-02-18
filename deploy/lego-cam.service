@@ -1,29 +1,27 @@
 [Unit]
 Description=lego-cam sensor-triggered recorder
-After=network.target
+After=multi-user.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/opt/lego-cam
+# Use the same user that runs Thonny / your Pi login (e.g. machon). Must be in group i2c for TMF8820.
+User=machon
+Group=machon
 
-# If you installed as a venv, point ExecStart to that venv's python.
-# Example:
-# ExecStart=/opt/lego-cam/.venv/bin/lego-cam --config /etc/lego-cam/config.toml
-ExecStart=/usr/bin/lego-cam --config /etc/lego-cam/config.toml
+# Project directory (change if your code is elsewhere)
+WorkingDirectory=/home/machon/Downloads/legocam/lego-cam-1
+
+# Run from project dir so "src.lego_cam.main" works. Use your real config path.
+ExecStart=/usr/bin/python3 -m src.lego_cam.main --config /etc/lego-cam/config.toml --log-level INFO
 
 Restart=always
-RestartSec=2
+RestartSec=5
 
-# Journald logging
 StandardOutput=journal
 StandardError=journal
 
-# A few pragmatic hardening defaults (adjust if you need device access)
-NoNewPrivileges=true
-PrivateTmp=true
+# Allow camera and I2C
+PrivateTmp=false
 
 [Install]
 WantedBy=multi-user.target
-
