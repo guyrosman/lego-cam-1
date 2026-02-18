@@ -6,6 +6,10 @@ Run on the Raspberry Pi with the sensor connected (I2C). Conditions:
   - Minimal ambient light
   - No object within 40 cm of the sensor
 
+Do NOT use sudo. Ensure your user can access I2C:
+  sudo usermod -aG i2c $USER
+  (then log out and back in, or reboot)
+
 Usage:
   python3 scripts/calibrate_tmf8820.py
   python3 scripts/calibrate_tmf8820.py -o /path/to/tmf8820_calibration.bin
@@ -17,6 +21,7 @@ Then set in your config.toml:
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 
@@ -46,6 +51,7 @@ def main() -> int:
 
     try:
         bus = SMBus(args.bus)
+        time.sleep(0.05)  # brief delay after opening I2C bus (can help avoid errno 121)
         tof = TMF882x(bus, address=args.address)
         tof.enable()
         print("Running calibration (this may take a few seconds)...")
@@ -54,6 +60,16 @@ def main() -> int:
         bus.close()
     except TMF882xException as e:
         print("TMF8820 error:", e, file=sys.stderr)
+        return 1
+    except OSError as e:
+        print("I2C error:", e, file=sys.stderr)
+        if e.errno == 121:
+            print(
+                "  (Errno 121 = Remote I/O: sensor not responding. Try: run without sudo; "
+                "add user to i2c group: sudo usermod -aG i2c $USER then re-login; "
+                "check wiring and power.)",
+                file=sys.stderr,
+            )
         return 1
     except Exception as e:
         print("Error:", e, file=sys.stderr)

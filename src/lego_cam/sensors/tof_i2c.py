@@ -33,7 +33,7 @@ class ToFSensor(BaseSensor):
     simulate: bool = False
     i2c_bus: int = 1
     i2c_address: int = 0x41
-    min_confidence: int = 10
+    min_confidence: int = 5
     calibration_file: str = ""
     smooth_alpha: float = 0.25  # EMA: 0=off, 0.2-0.4=moderate
     # For developer-mode status display: most recent distance estimate in mm (if available).
@@ -118,8 +118,15 @@ class ToFSensor(BaseSensor):
                         )
                 else:
                     log.warning("TMF8820 calibration file not found: %s", cal_path)
+            else:
+                log.warning(
+                    "TMF8820 running WITHOUT calibration — distance may be wrong. "
+                    "Run: python3 scripts/calibrate_tmf8820.py -o tmf8820_calibration.bin "
+                    "Then set sensor.tof_calibration_file in config."
+                )
 
             smoothed_mm: Optional[float] = None
+            first_sample_logged = False
 
             while True:
                 await asyncio.sleep(period)
@@ -164,6 +171,15 @@ class ToFSensor(BaseSensor):
                     smoothed_mm = raw_mm
 
                 self.debug_distance_mm = current_mm
+
+                if not first_sample_logged:
+                    first_sample_logged = True
+                    log.info(
+                        "TMF8820 first sample: distance_mm=%.1f (%s zones above confidence %s)",
+                        current_mm,
+                        len(distances),
+                        self.min_confidence,
+                    )
 
                 if baseline_mm is None:
                     baseline_mm = current_mm
