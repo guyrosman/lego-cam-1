@@ -102,11 +102,30 @@ class ToFSensor(BaseSensor):
         baseline_mm: Optional[float] = None
         stable_mm: Optional[float] = None
 
+        def _raise_i2c_hint(e: OSError) -> None:
+            if getattr(e, "errno", None) == 121:
+                raise RuntimeError(
+                    "TMF8820 I2C errno 121 (Remote I/O).\n"
+                    "  • Add your user to the i2c group:  sudo usermod -aG i2c $USER\n"
+                    "  • Log out and back in (or reboot), then try again.\n"
+                    "  • If using Thonny: restart Thonny after adding yourself to i2c.\n"
+                    "  • Check wiring (3.3V, GND, SDA, SCL) and that nothing else uses I2C."
+                ) from e
+            raise
+
         try:
-            bus = SMBus(self.i2c_bus)
-            await asyncio.sleep(0.5)  # match working code: delay after opening I2C bus
+            try:
+                bus = SMBus(self.i2c_bus)
+            except OSError as e:
+                _raise_i2c_hint(e)
+
+            await asyncio.sleep(1.0)  # longer delay after opening bus (helps avoid 121)
             tof = TMF882x(bus, address=self.i2c_address)
-            tof.enable()
+            try:
+                tof.enable()
+            except OSError as e:
+                _raise_i2c_hint(e)
+
             await asyncio.sleep(0.5)  # match working code: delay after enable
 
             if self.calibration_file:
@@ -146,6 +165,8 @@ class ToFSensor(BaseSensor):
                 except TMF882xException as e:
                     log.warning("TMF8820 measurement error: %s", e)
                     continue
+                except OSError as e:
+                    _raise_i2c_hint(e)
                 except Exception as e:  # pragma: no cover
                     log.exception("Unexpected TMF8820 error: %s", e)
                     continue
