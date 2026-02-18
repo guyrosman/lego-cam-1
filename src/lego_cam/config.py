@@ -13,6 +13,10 @@ class ServiceConfig:
     inactivity_seconds: int = 10
     # When true, enable on-screen preview + rich status logs.
     developer_mode: bool = False
+    # Developer screen/tool selection:
+    # - "normal": run full app
+    # - "sensor_test": run TMF8820 sensor-only diagnostics (no camera)
+    developer_view: str = "normal"
 
 
 @dataclass(frozen=True)
@@ -101,6 +105,9 @@ def load_config(path: str | Path) -> AppConfig:
             ),
             developer_mode=bool(
                 _deep_get(raw, ["service", "developer_mode"], ServiceConfig().developer_mode)
+            ),
+            developer_view=str(
+                _deep_get(raw, ["service", "developer_view"], ServiceConfig().developer_view)
             ),
         ),
         camera=CameraConfig(

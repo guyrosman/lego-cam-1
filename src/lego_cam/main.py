@@ -12,12 +12,14 @@ try:
     from src.lego_cam.controller import RecordingController  # type: ignore
     from src.lego_cam.logging_setup import setup_logging  # type: ignore
     from src.lego_cam.storage import StorageManager  # type: ignore
+    from src.lego_cam.sensor_test import run_sensor_test  # type: ignore
 except ImportError:
     # When installed as a package (console script: lego_cam.main:main)
     from lego_cam.config import AppConfig, load_config
     from lego_cam.controller import RecordingController
     from lego_cam.logging_setup import setup_logging
     from lego_cam.storage import StorageManager
+    from lego_cam.sensor_test import run_sensor_test
 
 
 log = logging.getLogger(__name__)
@@ -31,6 +33,11 @@ def _parse_args() -> argparse.Namespace:
 
 
 async def _run(config: AppConfig) -> None:
+    if config.service.developer_mode and config.service.developer_view.lower() == "sensor_test":
+        log.info("Developer sensor_test mode enabled")
+        await run_sensor_test(config)
+        return
+
     config.service.output_dir.mkdir(parents=True, exist_ok=True)
 
     storage = StorageManager(
