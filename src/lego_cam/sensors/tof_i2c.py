@@ -51,6 +51,9 @@ class ToFSensor(BaseSensor):
             # We keep a virtual distance in mm and only emit a motion event
             # when the distance changes by >= 40mm relative to the last stable
             # value. This approximates "only significant movements".
+            log.warning(
+                "TMF8820 SIMULATION ACTIVE — distance is fake. Set sensor.simulate=false in config for real sensor."
+            )
             log.info("ToF sensor simulation enabled (poll_hz=%s, hysteresis=±40mm)", self.poll_hz)
             baseline_mm = 600.0
             stable_mm = baseline_mm
@@ -88,9 +91,10 @@ class ToFSensor(BaseSensor):
                 # No events; configuration is invalid.
 
         log.info(
-            "TMF8820 hardware mode enabled (bus=%s, addr=0x%02X, hysteresis=±40mm)",
+            "TMF8820 hardware mode (bus=%s, addr=0x%02X, hysteresis=±40mm, smooth_alpha=%s = raw distance)",
             self.i2c_bus,
             self.i2c_address,
+            self.smooth_alpha,
         )
 
         bus: SMBus | None = None

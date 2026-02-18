@@ -46,7 +46,7 @@ class SensorConfig:
     # TMF8820 hardware only (ignored when simulate=true):
     tof_min_confidence: int = 5  # 0-255; zones below this are ignored (5 = more permissive)
     tof_calibration_file: str = ""  # path to .bin from scripts/calibrate_tmf8820.py
-    tof_smooth_alpha: float = 0.25  # 0=no smoothing, 0.2-0.4=moderate smoothing
+    tof_smooth_alpha: float = 0.0  # 0=raw distance (recommended); 0.2-0.4=smoothing
 
 
 @dataclass(frozen=True)
