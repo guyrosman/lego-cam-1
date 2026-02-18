@@ -57,6 +57,7 @@ class RecordingController:
             min_confidence=config.sensor.tof_min_confidence,
             calibration_file=config.sensor.tof_calibration_file or "",
             smooth_alpha=config.sensor.tof_smooth_alpha,
+            hysteresis_mm=float(config.sensor.tof_hysteresis_mm),
         )
         self._recorder = self._build_recorder()
 
@@ -144,6 +145,8 @@ class RecordingController:
             t2.add_done_callback(lambda t: _log_task_result(t, "camera_motion_loop"))
             t3 = tg.create_task(self._state_loop())
             t3.add_done_callback(lambda t: _log_task_result(t, "state_loop"))
+            t_dist = tg.create_task(self._distance_log_loop())
+            t_dist.add_done_callback(lambda t: _log_task_result(t, "distance_log_loop"))
             if self._developer_mode:
                 t4 = tg.create_task(self._dev_status_loop())
                 t4.add_done_callback(lambda t: _log_task_result(t, "dev_status_loop"))
@@ -195,6 +198,16 @@ class RecordingController:
                 continue
             if self._vision.detect(frame):
                 await self._on_motion(MotionEvent(source="camera", t_monotonic=monotonic(), score=1.0))
+
+    async def _distance_log_loop(self) -> None:
+        """Log ToF distance to journal every 2s so journalctl always shows it."""
+        while True:
+            await asyncio.sleep(2.0)
+            d = getattr(self._sensor, "debug_distance_mm", None)
+            if d is not None:
+                log.info("ToF distance_mm=%.1f", d)
+            else:
+                log.info("ToF distance_mm=n/a")
 
     async def _state_loop(self) -> None:
         inactivity = self._config.service.inactivity_seconds

@@ -47,6 +47,7 @@ class SensorConfig:
     tof_min_confidence: int = 5  # 0-255; zones below this are ignored (5 = more permissive)
     tof_calibration_file: str = ""  # path to .bin from scripts/calibrate_tmf8820.py
     tof_smooth_alpha: float = 0.0  # 0=raw distance (recommended); 0.2-0.4=smoothing
+    tof_hysteresis_mm: int = 80  # motion = distance change >= this (mm); increase to reduce false triggers
 
 
 @dataclass(frozen=True)
@@ -153,6 +154,9 @@ def load_config(path: str | Path) -> AppConfig:
             ),
             tof_smooth_alpha=float(
                 _deep_get(raw, ["sensor", "tof_smooth_alpha"], SensorConfig().tof_smooth_alpha)
+            ),
+            tof_hysteresis_mm=int(
+                _deep_get(raw, ["sensor", "tof_hysteresis_mm"], SensorConfig().tof_hysteresis_mm)
             ),
         ),
     )

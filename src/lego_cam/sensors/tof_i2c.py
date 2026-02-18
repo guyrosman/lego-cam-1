@@ -36,6 +36,7 @@ class ToFSensor(BaseSensor):
     min_confidence: int = 5
     calibration_file: str = ""
     smooth_alpha: float = 0.25  # EMA: 0=off, 0.2-0.4=moderate
+    hysteresis_mm: float = 80.0  # motion = distance change >= this (mm); increase to reduce false triggers
     # For developer-mode status display: most recent distance estimate in mm (if available).
     debug_distance_mm: Optional[float] = None
 
@@ -67,7 +68,7 @@ class ToFSensor(BaseSensor):
                 current_mm = max(50.0, current_mm + jitter)
                 self.debug_distance_mm = current_mm
 
-                if abs(current_mm - stable_mm) >= 40.0:
+                if abs(current_mm - stable_mm) >= self.hysteresis_mm:
                     log.debug(
                         "Simulated ToF motion event: %.1fmm -> %.1fmm", stable_mm, current_mm
                     )
@@ -91,9 +92,10 @@ class ToFSensor(BaseSensor):
                 # No events; configuration is invalid.
 
         log.info(
-            "TMF8820 hardware mode (bus=%s, addr=0x%02X, hysteresis=±40mm, smooth_alpha=%s = raw distance)",
+            "TMF8820 hardware mode (bus=%s, addr=0x%02X, hysteresis=±%.0fmm, smooth_alpha=%s = raw distance)",
             self.i2c_bus,
             self.i2c_address,
+            self.hysteresis_mm,
             self.smooth_alpha,
         )
 
@@ -232,7 +234,7 @@ class ToFSensor(BaseSensor):
                     stable_mm = current_mm
                     continue
 
-                if abs(current_mm - stable_mm) >= 40.0:
+                if abs(current_mm - stable_mm) >= self.hysteresis_mm:
                     log.debug(
                         "TMF8820 motion event: %.1fmm -> %.1fmm", stable_mm, current_mm
                     )
