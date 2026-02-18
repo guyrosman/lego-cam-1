@@ -179,6 +179,7 @@ class RecordingController:
         """
         async for ev in self._sensor.events():
             if ev:
+                log.info("Sensor motion: trigger (distance change >= hysteresis)")
                 await self._on_motion(
                     MotionEvent(source="sensor", t_monotonic=monotonic(), score=1.0)
                 )
@@ -327,6 +328,7 @@ class RecordingController:
             raise
         self._state = State.RECORDING
         self._last_motion_t = monotonic()
+        log.info("Recording started")
 
     async def _stop_recording(self) -> None:
         try:
