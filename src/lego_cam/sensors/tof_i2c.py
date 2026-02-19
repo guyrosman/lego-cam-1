@@ -4,6 +4,7 @@ import asyncio
 import logging
 import math
 import random
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncIterator, Optional
@@ -194,20 +195,67 @@ class ToFSensor(BaseSensor):
                         tof.calibrate()
                         log.info("TMF8820 calibration done")
                     except TMF882xException as e:
-                        log.warning("TMF8820 calibration failed: %s", e)
+                        log.warning(
+                            "TMF8820 calibration failed: %s. "
+                            "Try power-cycling the sensor (unplug 5s) or run "
+                            "scripts/calibrate_tmf8820.py and set tof_calibration_file in config.",
+                            e,
+                        )
                 else:
                     log.info("TMF8820 calibration OK (no file)")
 
             smoothed_mm: Optional[float] = None
             first_sample_logged = False
             consecutive_above = 0  # for persistence check
+            # Rate-limit repeated measurement errors (e.g. "Command failed with status 9")
+            last_measure_err_msg: Optional[str] = None
+            last_measure_err_count = 0
+            last_measure_err_log_time: float = 0.0
+            consecutive_measure_errors = 0
+            MEASURE_ERROR_LOG_INTERVAL = 30.0  # seconds between summary logs
+            MEASURE_RECOVERY_THRESHOLD = 15  # try standby+enable after this many consecutive errors
+
+            def _log_measure_error(e: TMF882xException) -> None:
+                nonlocal last_measure_err_msg, last_measure_err_count, last_measure_err_log_time
+                msg = str(e)
+                now = time.monotonic()
+                if msg != last_measure_err_msg:
+                    last_measure_err_msg = msg
+                    last_measure_err_count = 0
+                last_measure_err_count += 1
+                if last_measure_err_count == 1 or last_measure_err_count % 20 == 0:
+                    log.warning("TMF8820 measurement error: %s", e)
+                    last_measure_err_log_time = now
+                elif now - last_measure_err_log_time >= MEASURE_ERROR_LOG_INTERVAL:
+                    log.warning(
+                        "TMF8820 measurement error (last %s occurrences): %s",
+                        last_measure_err_count,
+                        e,
+                    )
+                    last_measure_err_log_time = now
 
             while True:
                 await asyncio.sleep(confirm_period)
                 try:
                     m = tof.measure()
+                    consecutive_measure_errors = 0
                 except TMF882xException as e:
-                    log.warning("TMF8820 measurement error: %s", e)
+                    consecutive_measure_errors += 1
+                    _log_measure_error(e)
+                    # If sensor is in a bad state (e.g. status 9 after cold start), try recovery
+                    if consecutive_measure_errors >= MEASURE_RECOVERY_THRESHOLD:
+                        log.info(
+                            "TMF8820 recovery: standby + enable after %s consecutive errors",
+                            consecutive_measure_errors,
+                        )
+                        try:
+                            tof.standby()
+                            await asyncio.sleep(0.5)
+                            tof.enable()
+                            await asyncio.sleep(0.5)
+                            consecutive_measure_errors = 0
+                        except Exception as rec:
+                            log.warning("TMF8820 recovery failed: %s", rec)
                     continue
                 except OSError as e:
                     _raise_i2c_hint(e)
