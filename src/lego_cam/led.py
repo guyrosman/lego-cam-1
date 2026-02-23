@@ -51,11 +51,14 @@ async def _led_blink_ok(led: object, duration_sec: float = 3.0) -> None:
 async def run_developer_led_sequence(
     gpio_pin: int,
     tof_check_coro,
-) -> None:
+):
     """
     Run LED sequence (developer_mode only). Does NOT touch the camera.
     Grabs GPIO first (before ToF) to avoid "gpio busy". Runs tof_check_coro
     after startup blink to get ToF status for the result blink.
+
+    Returns the LED object for motion feedback (caller must close when done).
+    Returns None if LED failed or gpio_pin <= 0.
 
     Sequence:
     1. Startup: blink on/off 5 seconds
@@ -63,7 +66,7 @@ async def run_developer_led_sequence(
     3. ToF fail: 5 bursts of 3 blinks; ToF OK: slow blink 3 seconds
     """
     if gpio_pin <= 0:
-        return
+        return None
     led = None
     try:
         from gpiozero import LED  # type: ignore
@@ -71,7 +74,7 @@ async def run_developer_led_sequence(
         log.warning(
             "Developer LED: gpiozero not installed. Install with: sudo apt install python3-gpiozero"
         )
-        return
+        return None
 
     for attempt in range(1, 4):
         try:
@@ -89,10 +92,10 @@ async def run_developer_led_sequence(
                 "Try developer_led_gpio=17 or another pin, or set to 0 to disable.",
                 e,
             )
-            return
+            return None
 
     if led is None:
-        return
+        return None
     try:
         await _led_blink_startup(led, 5.0)
         tof_ok = (await tof_check_coro())[0] if tof_check_coro else True
@@ -101,10 +104,11 @@ async def run_developer_led_sequence(
         else:
             await _led_blink_ok(led, 3.0)
         led.off()
+        return led
     except Exception as e:
         log.warning("Developer LED failed during sequence: %s", e)
-    finally:
         try:
             led.close()
         except Exception:
             pass
+        return None

@@ -80,6 +80,7 @@ class RecordingController:
 
         self._last_motion_t: float | None = None
         self._last_motion_event: MotionEvent | None = None
+        self._led = None  # developer LED for motion feedback (on=recording, off=idle)
 
     def _validate_environment(self) -> None:
         if self._config.camera.backend != "picamera2":
@@ -138,7 +139,7 @@ class RecordingController:
                     calibration_file=self._config.sensor.tof_calibration_file or "",
                     simulate=self._config.sensor.simulate,
                 )
-            await run_developer_led_sequence(
+            self._led = await run_developer_led_sequence(
                 self._config.service.developer_led_gpio,
                 _tof_check,
             )
@@ -154,18 +155,26 @@ class RecordingController:
             else:
                 log.warning("Task exited unexpectedly: %s", name)
 
-        async with asyncio.TaskGroup() as tg:
-            t1 = tg.create_task(self._sensor_loop())
-            t1.add_done_callback(lambda t: _log_task_result(t, "sensor_loop"))
-            t2 = tg.create_task(self._camera_motion_loop())
-            t2.add_done_callback(lambda t: _log_task_result(t, "camera_motion_loop"))
-            t3 = tg.create_task(self._state_loop())
-            t3.add_done_callback(lambda t: _log_task_result(t, "state_loop"))
-            t_dist = tg.create_task(self._distance_log_loop())
-            t_dist.add_done_callback(lambda t: _log_task_result(t, "distance_log_loop"))
-            if self._developer_mode:
-                t4 = tg.create_task(self._dev_status_loop())
-                t4.add_done_callback(lambda t: _log_task_result(t, "dev_status_loop"))
+        try:
+            async with asyncio.TaskGroup() as tg:
+                t1 = tg.create_task(self._sensor_loop())
+                t1.add_done_callback(lambda t: _log_task_result(t, "sensor_loop"))
+                t2 = tg.create_task(self._camera_motion_loop())
+                t2.add_done_callback(lambda t: _log_task_result(t, "camera_motion_loop"))
+                t3 = tg.create_task(self._state_loop())
+                t3.add_done_callback(lambda t: _log_task_result(t, "state_loop"))
+                t_dist = tg.create_task(self._distance_log_loop())
+                t_dist.add_done_callback(lambda t: _log_task_result(t, "distance_log_loop"))
+                if self._developer_mode:
+                    t4 = tg.create_task(self._dev_status_loop())
+                    t4.add_done_callback(lambda t: _log_task_result(t, "dev_status_loop"))
+        finally:
+            if self._led is not None:
+                try:
+                    self._led.close()
+                except Exception:
+                    pass
+                self._led = None
 
     def _build_recorder(self):
         if self._config.camera.backend != "picamera2":
@@ -344,6 +353,11 @@ class RecordingController:
             raise
         self._state = State.RECORDING
         self._last_motion_t = monotonic()
+        if self._led is not None:
+            try:
+                self._led.on()
+            except Exception:
+                pass
         log.info("Recording started")
 
     async def _stop_recording(self) -> None:
@@ -354,4 +368,9 @@ class RecordingController:
         self._storage.ensure_free_space()
         self._state = State.IDLE
         self._last_motion_t = None
+        if self._led is not None:
+            try:
+                self._led.off()
+            except Exception:
+                pass
         log.info("Controller back to IDLE (camera off)")
