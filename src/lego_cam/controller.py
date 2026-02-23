@@ -131,15 +131,16 @@ class RecordingController:
         self._state = State.IDLE
 
         if self._developer_mode and self._config.service.developer_led_gpio > 0:
-            tof_ok, _ = await check_tof_health(
-                i2c_bus=getattr(self._sensor, "i2c_bus", 1),
-                i2c_address=getattr(self._sensor, "i2c_address", 0x41),
-                calibration_file=self._config.sensor.tof_calibration_file or "",
-                simulate=self._config.sensor.simulate,
-            )
+            async def _tof_check():
+                return await check_tof_health(
+                    i2c_bus=getattr(self._sensor, "i2c_bus", 1),
+                    i2c_address=getattr(self._sensor, "i2c_address", 0x41),
+                    calibration_file=self._config.sensor.tof_calibration_file or "",
+                    simulate=self._config.sensor.simulate,
+                )
             await run_developer_led_sequence(
                 self._config.service.developer_led_gpio,
-                tof_ok,
+                _tof_check,
             )
 
         def _log_task_result(task: asyncio.Task[None], name: str) -> None:
