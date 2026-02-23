@@ -17,7 +17,7 @@ class ServiceConfig:
     # - "normal": run full app
     # - "sensor_test": run TMF8820 sensor-only diagnostics (no camera)
     developer_view: str = "normal"
-    # GPIO pin for status LED (BCM). 0 = disabled. Only when developer_mode=true.
+    # GPIO pin for status LED (BCM). 0 = disabled; any other = enabled (startup blink + motion on/off).
     developer_led_gpio: int = 0
 
 

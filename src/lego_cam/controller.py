@@ -131,7 +131,7 @@ class RecordingController:
         log.info("Controller starting (IDLE)")
         self._state = State.IDLE
 
-        if self._developer_mode and self._config.service.developer_led_gpio > 0:
+        if self._config.service.developer_led_gpio > 0:
             async def _tof_check():
                 return await check_tof_health(
                     i2c_bus=getattr(self._sensor, "i2c_bus", 1),

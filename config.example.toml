@@ -5,7 +5,7 @@ segment_seconds = 30
 inactivity_seconds = 10
 developer_mode = false  # true = on-screen preview + rich status logs; false = normal headless
 developer_view = "normal"  # normal|sensor_test (sensor_test = TMF8820-only debug, no camera)
-developer_led_gpio = 0     # BCM GPIO for status LED (0=disabled). Only when developer_mode=true.
+developer_led_gpio = 0     # BCM GPIO for status LED (0=disabled). Set to e.g. 17 for LED; works anytime, not only in developer_mode.
 
 [camera]
 backend = "picamera2"

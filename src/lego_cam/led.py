@@ -1,8 +1,8 @@
 """
-Status LED for developer mode.
+Status LED (optional).
 
-Uses BCM GPIO via gpiozero. Does NOT touch the camera (no Picamera2).
-No-op when GPIO fails (e.g. "gpio not allocated" on Pi 5).
+Uses BCM GPIO via gpiozero. Enabled when developer_led_gpio > 0 (independent of developer_mode).
+Startup blink + ToF health, then on=recording/motion, off=idle. Does NOT touch the camera.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ async def run_developer_led_sequence(
     tof_check_coro,
 ):
     """
-    Run LED sequence (developer_mode only). Does NOT touch the camera.
+    Run LED sequence (when developer_led_gpio > 0). Does NOT touch the camera.
     Grabs GPIO first (before ToF) to avoid "gpio busy". Runs tof_check_coro
     after startup blink to get ToF status for the result blink.
 
