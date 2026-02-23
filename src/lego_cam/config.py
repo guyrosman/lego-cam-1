@@ -18,7 +18,7 @@ class ServiceConfig:
     # - "sensor_test": run TMF8820 sensor-only diagnostics (no camera)
     developer_view: str = "normal"
     # GPIO pin for status LED (BCM numbering). 0 = disabled. Only used when developer_mode=true.
-    developer_led_gpio: int = 0
+    developer_led_gpio: int = 4
 
 
 @dataclass(frozen=True)
