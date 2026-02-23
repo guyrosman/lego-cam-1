@@ -18,6 +18,63 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
+async def check_tof_health(
+    i2c_bus: int = 1,
+    i2c_address: int = 0x41,
+    calibration_file: str = "",
+    simulate: bool = False,
+) -> tuple[bool, str]:
+    """Quick ToF health check. Returns (success, message). Does NOT touch the camera."""
+    if simulate:
+        return (True, "ToF OK (simulate)")
+    try:
+        from smbus2 import SMBus  # type: ignore
+        from tmf882x import TMF882x, TMF882xException  # type: ignore
+    except Exception:
+        return (False, "ToF FAILED: tmf882x-driver or smbus2 not installed")
+    bus = None
+    try:
+        bus = SMBus(i2c_bus)
+        await asyncio.sleep(1.0)
+        tof = TMF882x(bus, address=i2c_address)
+        tof.enable()
+        await asyncio.sleep(1.0)
+        if calibration_file:
+            cal_path = Path(calibration_file)
+            if cal_path.exists():
+                cal_bytes = cal_path.read_bytes()
+                if len(cal_bytes) == 188:
+                    tof.write_calibration(cal_bytes)
+        elif not getattr(tof, "calibration_ok", True):
+            try:
+                tof.calibrate()
+            except TMF882xException:
+                pass
+        ok_count = 0
+        for _ in range(12):
+            try:
+                m = tof.measure()
+                if m.results and any(r.distance > 0 for r in m.results):
+                    ok_count += 1
+            except TMF882xException:
+                pass
+            await asyncio.sleep(0.05)
+        tof.standby()
+        if ok_count >= 2:
+            return (True, "ToF OK")
+        return (False, "ToF FAILED: no reliable readings")
+    except OSError as e:
+        return (False, "ToF FAILED: " + str(e))
+    except Exception as e:
+        return (False, "ToF FAILED: " + str(e))
+    finally:
+        if bus is not None:
+            try:
+                bus.close()
+            except Exception:
+                pass
+
+
 @dataclass
 class ToFSensor(BaseSensor):
     """

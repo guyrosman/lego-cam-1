@@ -12,13 +12,15 @@ from time import monotonic
 
 try:
     from src.lego_cam.config import AppConfig  # type: ignore
+    from src.lego_cam.led import run_developer_led_sequence  # type: ignore
     from src.lego_cam.motion.vision_motion import VisionMotionDetector  # type: ignore
-    from src.lego_cam.sensors.tof_i2c import ToFSensor  # type: ignore
+    from src.lego_cam.sensors.tof_i2c import ToFSensor, check_tof_health  # type: ignore
     from src.lego_cam.storage import StorageManager  # type: ignore
 except ImportError:
     from lego_cam.config import AppConfig
+    from lego_cam.led import run_developer_led_sequence
     from lego_cam.motion.vision_motion import VisionMotionDetector
-    from lego_cam.sensors.tof_i2c import ToFSensor
+    from lego_cam.sensors.tof_i2c import ToFSensor, check_tof_health
     from lego_cam.storage import StorageManager
 
 
@@ -127,6 +129,18 @@ class RecordingController:
     async def run_forever(self) -> None:
         log.info("Controller starting (IDLE)")
         self._state = State.IDLE
+
+        if self._developer_mode and self._config.service.developer_led_gpio > 0:
+            tof_ok, _ = await check_tof_health(
+                i2c_bus=getattr(self._sensor, "i2c_bus", 1),
+                i2c_address=getattr(self._sensor, "i2c_address", 0x41),
+                calibration_file=self._config.sensor.tof_calibration_file or "",
+                simulate=self._config.sensor.simulate,
+            )
+            await run_developer_led_sequence(
+                self._config.service.developer_led_gpio,
+                tof_ok,
+            )
 
         def _log_task_result(task: asyncio.Task[None], name: str) -> None:
             try:
