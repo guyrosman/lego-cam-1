@@ -2,22 +2,23 @@
 
 This makes lego-cam start at boot and keep running. You don’t need a monitor or to run Thonny.
 
-## 1. Create the config file
+## 1. Edit the config file
 
-The service will use a single config file (e.g. in `/etc/lego-cam/`).
+The service uses the **same config file as Thonny**: `config.example.toml` in the project root.
+
+Edit it:
 
 ```bash
-sudo mkdir -p /etc/lego-cam
-sudo nano /etc/lego-cam/config.toml
+nano /home/machon/Downloads/legocam/lego-cam-1/config.example.toml
 ```
 
-Paste your working config (same as when you run from Thonny). Important:
+Important:
 
 - Set `developer_mode = false` for headless (no preview).
 - Set `sensor.simulate = false` for real TMF8820.
-- Use an **absolute path** for `output_dir`, e.g. `output_dir = "/home/machon/videos"` or `"/var/lib/lego-cam/videos"`.
+- Set `output_dir` to your storage path, e.g. `output_dir = "/media/machon/PKBACK"`.
 
-Save (Ctrl+O, Enter, Ctrl+X).
+Save (Ctrl+O, Enter, Ctrl+X). Thonny and the service both use this file.
 
 ## 2. Put the service file in place
 
@@ -38,7 +39,7 @@ Change:
 
 - `User=` and `Group=` if your Pi user is not `machon`
 - `WorkingDirectory=` to the folder that contains your `src` directory (the lego-cam project root)
-- `--config ...` in `ExecStart=` if your config is not `/etc/lego-cam/config.toml`
+- `--config ...` in `ExecStart=` if your config is not `config.example.toml`
 
 ## 3. Enable and start the service
 

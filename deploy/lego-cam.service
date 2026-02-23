@@ -11,8 +11,8 @@ Group=machon
 # Project directory (change if your code is elsewhere)
 WorkingDirectory=/home/machon/Downloads/legocam/lego-cam-1
 
-# Run from project dir so "src.lego_cam.main" works. Use your real config path.
-ExecStart=/usr/bin/python3 -m src.lego_cam.main --config /etc/lego-cam/config.toml --log-level INFO
+# Run from project dir so "src.lego_cam.main" works. Uses project config (same as Thonny).
+ExecStart=/usr/bin/python3 -m src.lego_cam.main --config config.example.toml --log-level INFO
 
 Restart=always
 RestartSec=5

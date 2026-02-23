@@ -7,7 +7,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class ServiceConfig:
-    output_dir: Path = Path("./videos")
+    output_dir: Path = Path("/media/machon/PKBACK")
     min_free_mb: int = 1024
     segment_seconds: int = 30
     inactivity_seconds: int = 10
