@@ -17,8 +17,6 @@ class ServiceConfig:
     # - "normal": run full app
     # - "sensor_test": run TMF8820 sensor-only diagnostics (no camera)
     developer_view: str = "normal"
-    # GPIO pin for status LED (BCM numbering). 0 = disabled. Only used when developer_mode=true.
-    developer_led_gpio: int = 4
 
 
 @dataclass(frozen=True)
@@ -112,9 +110,6 @@ def load_config(path: str | Path) -> AppConfig:
             ),
             developer_view=str(
                 _deep_get(raw, ["service", "developer_view"], ServiceConfig().developer_view)
-            ),
-            developer_led_gpio=int(
-                _deep_get(raw, ["service", "developer_led_gpio"], ServiceConfig().developer_led_gpio)
             ),
         ),
         camera=CameraConfig(
