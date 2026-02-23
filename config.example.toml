@@ -1,10 +1,11 @@
 [service]
-output_dir = "./videos"
+output_dir = "/media/machon/PKBACK"
 min_free_mb = 256
 segment_seconds = 30
 inactivity_seconds = 10
 developer_mode = false  # true = on-screen preview + rich status logs; false = normal headless
 developer_view = "normal"  # normal|sensor_test (sensor_test = TMF8820-only debug, no camera)
+developer_led_gpio = 0    # BCM GPIO for status LED (0=disabled). Only used when developer_mode=true. e.g. 17 for physical pin 11
 
 [camera]
 backend = "picamera2"
