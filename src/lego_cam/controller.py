@@ -12,13 +12,13 @@ from time import monotonic
 
 try:
     from src.lego_cam.config import AppConfig  # type: ignore
-    from src.lego_cam.led import run_developer_led_sequence, led_3_blinks  # type: ignore
+    from src.lego_cam.led import run_developer_led_sequence  # type: ignore
     from src.lego_cam.motion.vision_motion import VisionMotionDetector  # type: ignore
     from src.lego_cam.sensors.tof_i2c import ToFSensor, check_tof_health  # type: ignore
     from src.lego_cam.storage import StorageManager  # type: ignore
 except ImportError:
     from lego_cam.config import AppConfig
-    from lego_cam.led import run_developer_led_sequence, led_3_blinks
+    from lego_cam.led import run_developer_led_sequence
     from lego_cam.motion.vision_motion import VisionMotionDetector
     from lego_cam.sensors.tof_i2c import ToFSensor, check_tof_health
     from lego_cam.storage import StorageManager
@@ -81,7 +81,6 @@ class RecordingController:
         self._last_motion_t: float | None = None
         self._last_motion_event: MotionEvent | None = None
         self._led = None  # status LED for motion feedback (on=recording, off=idle)
-        self._reset_requested = False
 
     def _validate_environment(self) -> None:
         if self._config.camera.backend != "picamera2":
@@ -128,62 +127,6 @@ class RecordingController:
                 "Using TMF8820 ToF sensor in hardware mode (sensor.simulate=false)."
             )
 
-    async def _wait_for_reset_button(self) -> None:
-        """Block until the reset button is pressed (then released)."""
-        pin = self._config.service.reset_button_gpio
-        if pin <= 0:
-            return
-        try:
-            from gpiozero import Button  # type: ignore
-        except ImportError:
-            log.warning("Reset button: gpiozero not installed; starting without waiting for button.")
-            return
-        btn = None
-        try:
-            btn = Button(pin, pull_up=True)
-            log.info("Press reset button (GPIO %s) to start...", pin)
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, btn.wait_for_press)
-            await asyncio.sleep(0.1)
-        finally:
-            if btn is not None:
-                try:
-                    btn.close()
-                except Exception:
-                    pass
-
-    async def _reset_button_loop(self, other_tasks: list[asyncio.Task[None]]) -> None:
-        """Watch reset button; on press: save/stop recording, then cancel other tasks to trigger restart."""
-        pin = self._config.service.reset_button_gpio
-        if pin <= 0:
-            await asyncio.Future()
-            return
-        try:
-            from gpiozero import Button  # type: ignore
-        except ImportError:
-            await asyncio.Future()
-            return
-        btn = None
-        try:
-            btn = Button(pin, pull_up=True)
-            while True:
-                await asyncio.sleep(0.1)
-                if not btn.is_pressed:
-                    continue
-                log.info("Reset button pressed: stopping recording (if any) and restarting...")
-                self._reset_requested = True
-                if self._state == State.RECORDING:
-                    await self._stop_recording()
-                for t in other_tasks:
-                    t.cancel()
-                return
-        finally:
-            if btn is not None:
-                try:
-                    btn.close()
-                except Exception:
-                    pass
-
     async def run_forever(self) -> None:
         log.info("Controller starting (IDLE)")
         self._state = State.IDLE
@@ -212,46 +155,26 @@ class RecordingController:
             else:
                 log.warning("Task exited unexpectedly: %s", name)
 
-        while True:
-            self._reset_requested = False
-            if self._config.service.reset_button_gpio > 0:
-                await self._wait_for_reset_button()
+        try:
+            async with asyncio.TaskGroup() as tg:
+                t1 = tg.create_task(self._sensor_loop())
+                t1.add_done_callback(lambda t: _log_task_result(t, "sensor_loop"))
+                t2 = tg.create_task(self._camera_motion_loop())
+                t2.add_done_callback(lambda t: _log_task_result(t, "camera_motion_loop"))
+                t3 = tg.create_task(self._state_loop())
+                t3.add_done_callback(lambda t: _log_task_result(t, "state_loop"))
+                t_dist = tg.create_task(self._distance_log_loop())
+                t_dist.add_done_callback(lambda t: _log_task_result(t, "distance_log_loop"))
+                if self._developer_mode:
+                    t4 = tg.create_task(self._dev_status_loop())
+                    t4.add_done_callback(lambda t: _log_task_result(t, "dev_status_loop"))
+        finally:
             if self._led is not None:
                 try:
-                    await led_3_blinks(self._led)
+                    self._led.close()
                 except Exception:
                     pass
-
-            try:
-                async with asyncio.TaskGroup() as tg:
-                    t1 = tg.create_task(self._sensor_loop())
-                    t1.add_done_callback(lambda t: _log_task_result(t, "sensor_loop"))
-                    t2 = tg.create_task(self._camera_motion_loop())
-                    t2.add_done_callback(lambda t: _log_task_result(t, "camera_motion_loop"))
-                    t3 = tg.create_task(self._state_loop())
-                    t3.add_done_callback(lambda t: _log_task_result(t, "state_loop"))
-                    t_dist = tg.create_task(self._distance_log_loop())
-                    t_dist.add_done_callback(lambda t: _log_task_result(t, "distance_log_loop"))
-                    tasks_for_reset = [t1, t2, t3, t_dist]
-                    if self._developer_mode:
-                        t4 = tg.create_task(self._dev_status_loop())
-                        t4.add_done_callback(lambda t: _log_task_result(t, "dev_status_loop"))
-                        tasks_for_reset.append(t4)
-                    if self._config.service.reset_button_gpio > 0:
-                        tg.create_task(self._reset_button_loop(tasks_for_reset))
-            except (asyncio.CancelledError, BaseExceptionGroup) as e:
-                if not self._reset_requested:
-                    raise
-            finally:
-                if self._led is not None:
-                    try:
-                        self._led.off()
-                    except Exception:
-                        pass
-
-            if self._config.service.reset_button_gpio <= 0:
-                break
-            log.info("Restarting: press reset button to run again...")
+                self._led = None
 
     def _build_recorder(self):
         if self._config.camera.backend != "picamera2":

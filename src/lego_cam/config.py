@@ -19,10 +19,8 @@ class ServiceConfig:
     developer_view: str = "normal"
     # GPIO pin for status LED (BCM). 0 = disabled; e.g. 17 for LED (startup blink + optional motion on/off).
     developer_led_gpio: int = 17
-    # When true, LED turns on while recording and off when idle. When false, LED is only used at startup/reset.
+    # When true, LED turns on while recording and off when idle. When false, LED is only used at startup.
     led_motion_feedback: bool = True
-    # GPIO pin for reset button (BCM). 0 = disabled. Wire button between this pin and GND (internal pull-up).
-    reset_button_gpio: int = 27
 
 
 @dataclass(frozen=True)
@@ -122,9 +120,6 @@ def load_config(path: str | Path) -> AppConfig:
             ),
             led_motion_feedback=bool(
                 _deep_get(raw, ["service", "led_motion_feedback"], ServiceConfig().led_motion_feedback)
-            ),
-            reset_button_gpio=int(
-                _deep_get(raw, ["service", "reset_button_gpio"], ServiceConfig().reset_button_gpio)
             ),
         ),
         camera=CameraConfig(
