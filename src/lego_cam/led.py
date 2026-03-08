@@ -37,6 +37,15 @@ async def _led_blink_tof_fail(led: object) -> None:
         await asyncio.sleep(burst_pause)
 
 
+async def led_3_blinks(led: object) -> None:
+    """Three short blinks (e.g. 'ready to run' signal)."""
+    for _ in range(3):
+        led.on()
+        await asyncio.sleep(0.2)
+        led.off()
+        await asyncio.sleep(0.2)
+
+
 async def _led_blink_ok(led: object, duration_sec: float = 3.0) -> None:
     """Slow blink on/off for duration_sec (0.5s on, 0.5s off)."""
     half = 0.5

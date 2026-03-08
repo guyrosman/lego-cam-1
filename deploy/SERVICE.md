@@ -17,6 +17,8 @@ Important:
 - Set `developer_mode = false` for headless (no preview).
 - Set `sensor.simulate = false` for real TMF8820.
 - Set `output_dir` to your storage path, e.g. `output_dir = "/media/machon/PKBACK"`.
+- **LED** (optional): `developer_led_gpio = 17` — wire LED (with resistor) from BCM 17 (physical pin 11) to GND.
+- **Reset button** (optional): `reset_button_gpio = 27` — wire an SPST momentary pushbutton between BCM 27 (physical pin 13) and GND. Press once to start after boot; press anytime to save and restart.
 
 Save (Ctrl+O, Enter, Ctrl+X). Thonny and the service both use this file.
 
